@@ -1,5 +1,6 @@
 # Task 1 建模方法论：严格无数据泄露的 Early Waker 预测
 
+> 版本：v2 Final（整合方案A可复现性 + 方案B严格防泄漏）
 > 作者：角色 A（算法与代码主攻手）
 > 日期：2026-07-26
 
@@ -9,7 +10,7 @@
 
 **任务目标**：利用多维度健康与行为特征，构建二分类模型预测个体是否为"早起者"（Early_Waker = Yes/No）。
 
-**初赛评分**：ACC1 × 100 × 20% — 即该任务占初赛总分的 20%。
+**初赛评分**：ACC1 × 100 × 20% — 该任务占初赛总分的 20%。
 
 ---
 
@@ -19,7 +20,7 @@
 
 初始建模（包含全部 60 个特征）时，所有模型（Random Forest、XGBoost、LightGBM）的交叉验证和验证集准确率均达到 **ACC1 = 1.0000（100%）**。
 
-通过交叉分析 `Wake_Up_Time` 与 `Early_Waker` 标签，发现了数据泄露的证据：
+通过交叉分析 `Wake_Up_Time` 与 `Early_Waker` 标签，发现数据泄露的证据：
 
 | 起床时间段 | Early_Waker = Yes | Early_Waker = No | 样本数 |
 |:----------:|:---:|:---:|:---:|
@@ -39,23 +40,19 @@
 
 这与比赛考察"用多维度健康数据预测作息习惯"的目标完全背离。
 
-### 2.3 修复策略
+### 2.3 修复策略（最终版：方案B 严格策略 + 管道防泄漏）
 
-从特征集中**移除 2 个直接泄露标签的特征**：
+从特征集中**移除 3 个与时钟时刻相关的特征**：
 
 | 移除的特征 | 移除原因 |
 |-----------|---------|
 | `Wake_Up_Time_Minutes` | 直接定义答案是/否（4-5点全Yes, 7-11点全No） |
-| `Sleep_Time_Minutes` | 与起床时间高度共线（`r ≈ -0.82`），间接暴露作息时刻 |
+| `Sleep_Time_Minutes` | 与起床时间高度共线（r ≈ -0.82），间接暴露作息时刻 |
+| `Sleep_Duration_Hours` | **可从 `Wake_Up_Time` 和 `Sleep_Time` 推算（Wake - Sleep = Duration），构成间接泄露** |
 
-**保留的睡眠相关特征**：
-- `Sleep_Duration_Hours`（睡眠时长）——不直接暴露时刻
-- `Sleep_Quality_Score`（睡眠质量）
-- `Number_of_Night_Awakenings`（夜间醒来次数）
-- `Weekend_Sleep_Difference_Hours`（周末作息差异）
-- `Screen_Time_Before_Bed_Hours`（睡前屏幕时间）
+此外，采用**管道内每折独立编码**策略：在 5-Fold Cross Validation 的每一折内部，分别对训练折叠 fit `StandardScaler` 和 `LabelEncoder`，再用 fit 后的编码器 transform 验证折叠。这杜绝了编码过程中训练集信息泄露到验证集的风险。
 
-修复后特征数：**60 → 58**。
+修复后特征数：**60 → 57（数值）+ 17（类别编码）= 58 个有效特征**。
 
 ---
 
@@ -74,122 +71,136 @@
 
 ### 3.2 特征工程
 
-- **时间转换**：`Wake_Up_Time`（"6:35"）和 `Sleep_Time`（"23:48"）转换为**午夜起分钟数**（395 和 1428），方便数值模型处理
-- **类别编码**：17 个类别特征使用 `LabelEncoder` 转为 0…k-1 整数
-- **目标编码**：`Early_Waker` → Yes=1, No=0；`Health_Score` → 四分位数分箱 → Poor/Average/Good/Excellent
-- **数值标准化**：43 个数值特征使用 `StandardScaler`（仅对训练集 fit）
+- **时间转换**：`Wake_Up_Time`（"6:35"）和 `Sleep_Time`（"23:48"）转换为**午夜起分钟数**（395 和 1428），方便后续分析（建模时这类分钟数列会被排除）
+- **类别编码**：17 个类别特征使用 `LabelEncoder` 转为 0…k-1 整数（在每折 CV 内部或全量训练集上 fit）
+- **目标编码**：`Early_Waker` → Yes=1, No=0
+- **数值标准化**：41 个数值特征使用 `StandardScaler`（在每折 CV 内部 fit on train fold）
 
 ### 3.3 数据划分
 
 - 训练集：8,000 样本（80%）
-- 验证集：2,000 样本（20%）
-- 分层抽样：按 `Wellness_Category` 保持各类别比例一致
+- 测试集：2,000 样本（20%）
+- **分层抽样**：`stratify=y`（确保训练集和测试集中 Yes/No 比例一致）
 - 随机种子：42（保证可复现）
+- 类别分布：训练集 No=4,674 / Yes=3,326；测试集 No=1,168 / Yes=832
 
 ### 3.4 Data_clean.csv 的输出
 
-`Data_clean.csv` 在缺失值填充**之后**、类别编码**之前**导出，保持人类可读的原始格式（不含 `_Encoded` 后缀列）：
+`Data_clean.csv` 在缺失值填充**之后**、类别编码**之前**导出，保持人类可读的原始格式：
 
 ```
 原始数据 (10,000×64)
   → 缺失值填充（Alcohol→"Unknown", 锻炼→"None"等）
-  → 时间特征转换（新增 Wake_Up_Time_Minutes, Sleep_Time_Minutes 列）
-  → 导出 Data_clean.csv (10,000×66)
-  → 继续编码、标准化、划分 → processed_data.pkl
+  → 时间特征转换（新增 Wake_Up_Time_Minutes + Sleep_Time_Minutes）
+  → 导出 Data_clean.csv (10,000×66, 0 缺失值)
+  → 继续编码、标准化、划分 → 建模
 ```
 
 ---
 
 ## 4. 建模流程
 
-### 4.1 基线模型对比（5 折交叉验证）
+### 4.1 5 折交叉验证（管道内防泄露）
 
-使用 **58 个无泄漏特征** 训练 4 个基线模型：
+每折内部独立完成编码+缩放（`fit on train fold, transform both`），然后训练 4 个基线模型：
 
-| 模型 | 5-Fold CV | 验证集 ACC | 验证集 F1 |
-|------|:---:|:---:|:---:|
-| Logistic Regression | 0.7488 ± 0.0114 | **0.7500** | 0.6827 |
-| Random Forest (n=200, depth=12) | 0.7309 ± 0.0058 | 0.7305 | 0.6390 |
-| XGBoost (n=200, depth=6) | 0.7338 ± 0.0027 | 0.7375 | 0.6721 |
-| LightGBM (n=200, depth=6) | 0.7331 ± 0.0061 | 0.7315 | 0.6595 |
+| 模型 | OOF ACC1 | Balanced Accuracy | F1 (Yes) | Recall (Yes) |
+|------|:---:|:---:|:---:|:---:|
+| **Logistic Regression** | **0.7482** | 0.7343 | 0.6827 | 0.6518 |
+| Random Forest (n=300, depth=15) | 0.7372 | 0.7165 | 0.6523 | 0.5932 |
+| XGBoost (n=300, depth=8, lr=0.05) | 0.7340 | 0.7194 | 0.6642 | 0.6329 |
+| LightGBM (n=300, depth=8, lr=0.05, leaves=63) | 0.7300 | 0.7165 | 0.6621 | 0.6365 |
 
-> ⚠️ **关键对比**：含泄漏特征时 CV=1.0000；移除后 CV≈0.73-0.75。差距约 25 个百分点，正是"抄答案"和"真学习"的差异。
+> ⚠️ **关键对比**：含泄漏特征时 CV=1.0000；移除后 OOF ACC1≈0.73-0.75。差距约 25 个百分点，正是"抄答案"和"真学习"的差异。
 
-### 4.2 超参数调优（手动网格搜索）
+### 4.2 模型选择与解释
 
-每个模型搜索 2 组参数组合（3 折 CV），避免 GridSearchCV 的笛卡尔积爆炸：
+**Logistic Regression 是 OOF 最优单模型**（ACC1=0.7482）。这暗示在严格排除所有时钟相关特征后，早起/非早起的决策边界变得相对线性——生活方式和健康指标的组合可以以一个线性分界面较好地分离两类人群。
 
-**XGBoost**：`{n_estimators: 300, max_depth: 8, learning_rate: 0.05}` → 3-CV = 0.7429
+Random Forest 和 XGBoost 在训练集上的表现更"极端"（训练 ACC 更高），但在 OOF 验证上并未超越 Logistic Regression，说明它们在一定程度上过拟合了训练数据。
 
-**LightGBM**：`{n_estimators: 300, max_depth: 8, learning_rate: 0.05, num_leaves: 63}` → 3-CV = 0.7390
+### 4.3 Voting Ensemble
 
-**Random Forest**：`{n_estimators: 500, max_depth: None}` → 3-CV = 0.7356
-
-### 4.3 集成模型（Voting Ensemble）
-
-将三个调优后的模型通过 **软投票（Soft Voting）** 集成：
+将四个模型通过 **软投票（Soft Voting）** 集成：
 
 ```
-VotingClassifier(
-    XGBoost (n=300, depth=8, lr=0.05)
-  + LightGBM (n=300, depth=8, lr=0.05, leaves=63)
-  + Random Forest (n=500, depth=None)
-  → voting='soft'
-)
+VotingClassifier(voting='soft')
+  ├── Logistic Regression
+  ├── Random Forest (n=300, depth=15)
+  ├── XGBoost (n=300, depth=8, lr=0.05)
+  └── LightGBM (n=300, depth=8, lr=0.05, leaves=63)
 ```
-
-集成后的验证集 ACC = **0.7420**，F1 = 0.6738。
 
 ---
 
 ## 5. 最终结果
 
-### 5.1 ACC1 得分
+### 5.1 测试集评估（独立 20% 数据）
+
+| 模型 | ACC1 | Balanced Accuracy | F1 (Yes) | Recall (Yes) |
+|------|:---:|:---:|:---:|:---:|
+| **Logistic Regression** | **0.7710** | **0.7569** | **0.7098** | **0.6731** |
+| Random Forest | 0.7555 | 0.7359 | 0.6781 | 0.6190 |
+| XGBoost | 0.7455 | 0.7316 | 0.6797 | 0.6490 |
+| LightGBM | 0.7435 | 0.7292 | 0.6763 | 0.6442 |
+| **Voting Ensemble** | **0.7560** | 0.7418 | 0.6915 | 0.6575 |
+
+### 5.2 最终 ACC1
 
 | 阶段 | ACC1 | 含义 |
 |------|:---:|------|
-| **修复前**（60 特征，含泄漏） | 1.0000 | 抄答案，无意义 |
-| **修复后**（58 特征，无泄漏） | **0.7420** | 真正学习多维度规律 |
-| 得分贡献（20%权重） | **14.84 / 20.00** | |
+| **修复前**（60 特征，含 Wake_Up_Time） | 1.0000 | 抄答案，无意义 |
+| **方案A**（58 特征，含 Sleep_Duration） | 0.7420 | 仍有一条间接泄露通道 |
+| **方案B FINAL**（57 特征，严格排除） | **0.7560** | 最严格的非时钟预测 |
+| 得分贡献（20%权重） | **15.12 / 20.00** | |
 
-### 5.2 特征重要性（Top 10）
+### 5.3 特征重要性（Top 15，三模型平均）
 
 | 排名 | 特征 | 重要性 | 解读 |
 |:---:|------|:---:|------|
-| 1 | **Productivity_Score** | 5.23% | 早起者平均生产力更高 |
-| 2 | **Breakfast_Regularity_Score** | 4.29% | 早起者吃早餐更规律 |
-| 3 | **Stress_Level** | 3.28% | 压力水平存在显著差异 |
-| 4 | **Sleep_Duration_Hours** | 3.14% | 睡眠时长（非时刻） |
-| 5 | **Cholesterol_Level** | 2.99% | 生理指标 |
-| 6 | **Protein_Intake_Grams** | 2.89% | 蛋白质摄入 |
-| 7 | **Daily_Calorie_Intake** | 2.88% | 每日卡路里 |
-| 8 | **Water_Intake_Liters** | 2.86% | 饮水量 |
-| 9 | **Height_cm** | 2.86% | 身高 |
-| 10 | **Blood_Sugar_Level** | 2.78% | 血糖水平 |
+| 1 | **Productivity_Score** | 11.55% | 早起者生产力系统性地更高 |
+| 2 | **Breakfast_Regularity_Score** | 4.53% | 早起者吃早餐更规律 |
+| 3 | **Stress_Level** | 2.50% | 压力水平存在可区分差异 |
+| 4 | **Daily_Calorie_Intake** | 2.25% | 每日热量摄入 |
+| 5 | **Daily_Steps** | 2.24% | 每日步数 |
+| 6 | **Blood_Sugar_Level** | 2.23% | 血糖水平 |
+| 7 | **Water_Intake_Liters** | 2.19% | 饮水量 |
+| 8 | **Mood_Score** | 2.17% | 情绪状态 |
+| 9 | **Weekend_Sleep_Difference_Hours** | 2.17% | 周末作息差异 |
+| 10 | **Health_Score** | 2.16% | 综合健康评分 |
+| 11 | **Outdoor_Time_Hours** | 2.13% | 户外活动时间 |
+| 12 | **Height_cm** | 2.09% | 身高（人口学变量） |
+| 13 | **Energy_Level_Score** | 2.07% | 精力水平 |
+| 14 | **Protein_Intake_Grams** | 2.06% | 蛋白质摄入 |
+| 15 | **Exercise_Duration_Minutes** | 2.06% | 每次锻炼时长 |
 
-**关键发现**：58 个特征的重要性分布**均匀且分散**——排名第一的 `Productivity_Score` 也仅占 5.23%。这说明早起行为并非由单个因素决定，而是**多维度的生活方式的综合体现**，符合比赛的考察目标。
+**关键发现**：58 个特征的重要性分布**均匀且分散**——排名第一的 `Productivity_Score` 占 11.55%，其余特征均在 2-5% 之间。这说明早起行为是由**多维度的生活方式综合体现**，无单一主导因素，符合比赛的考察目标。
 
-### 5.3 混淆矩阵（验证集 2,000 样本）
+### 5.4 混淆矩阵（测试集 2,000 样本）
 
-| | 预测 No | 预测 Yes |
+|  | 预测 No | 预测 Yes |
 |---|---|:---:|
-| **实际 No** | 951 (TP) | 203 (FP) |
-| **实际 Yes** | 313 (FN) | 533 (TN) |
+| **实际 No** | 965 | 203 |
+| **实际 Yes** | 285 | 547 |
 
-- **Precision (Yes)** = 533/(533+203) = 72.4%
-- **Recall (Yes)** = 533/(533+313) = 63.0%
+- **Precision (Yes)** = 547/(547+203) = 72.9%
+- **Recall (Yes)** = 547/(547+285) = 65.7%
+- **Precision (No)** = 965/(965+285) = 77.2%
+- **Recall (No)** = 965/(965+203) = 82.6%
 
 ---
 
 ## 6. 核心结论
 
-1. **数据泄露是机器学习竞赛中最隐蔽的陷阱**。`Wake_Up_Time` 作为"定义性特征"必须在建模前排除，否则模型准确率虚高但毫无实际价值。
+1. **数据泄露是机器学习竞赛中最隐蔽的陷阱**。`Wake_Up_Time`、`Sleep_Time` 和 `Sleep_Duration_Hours` 必须在建模前排除，否则模型准确率虚高但毫无实际价值。
 
-2. **移除泄漏特征后 ACC1 从 1.0 降至 0.742**。这 25.8 个百分点的差距恰好量化了"抄答案"和"真学习"之间的距离。
+2. **三位一体的排除策略**：起床时间、入睡时间和睡眠时长本质上都是"时钟信息"的不同形式。严格方案移除三者后，ACC1 从 1.0 降至 0.756——这 24.4 个百分点的差距量化了"抄答案"和"真学习"之间的距离。
 
-3. **58 个特征的贡献均匀分散**（无单一特征超过 6%），证明早起行为是一个由生活方式、饮食习惯、心理状态、生理指标共同决定的多维度现象——这才是比赛真正希望参赛者发现的规律。
+3. **管道内防泄露是必要保障**。每折内部独立编码（fit on train fold, transform val fold）比"先 fit scaler 再 CV"更严格，杜绝了微小的信息泄露。
 
-4. **Voting Ensemble（XGB + LightGBM + RF）** 在无泄漏条件下提供了最稳健的预测，可作为后续持续优化的基线。
+4. **Logistic Regression 在严格特征集下表现最优**，说明早起/非早起的分类问题在非时钟特征上具有较好的线性可分性。
+
+5. **58 个特征的贡献均匀分散**（除 Productivity_Score 外均在 5% 以下），证明早起行为是一个由生产力、生活习惯、心理状态、生理指标共同决定的多维度现象——这才是比赛真正希望参赛者发现的规律。
 
 ---
 
@@ -198,9 +209,11 @@ VotingClassifier(
 | 文件 | 路径 | 说明 |
 |------|------|------|
 | 预测结果 | `outputs/task1/predictions.csv` | 2000行，Person_ID + True_Label + Predicted_Label |
-| 特征重要性 | `outputs/task1/feature_importance.csv` | 58个特征的重要性排名 |
-| 评估指标 | `outputs/task1/metrics.txt` | ACC1、F1、各模型对比、Top 15 特征 |
+| 特征重要性 | `outputs/task1/feature_importance.csv` | 58个特征的重要性排名（3模型平均） |
+| 评估指标 | `outputs/task1/metrics.txt` | ACC1、BalAcc、F1、Recall、各模型对比 |
 | 最佳模型 | `outputs/task1/best_model.pkl` | Voting Ensemble 序列化模型 |
-| 独立运行脚本 | `run_task1_fixed.py` | 可独立运行的完整建模流程 |
-| 标准脚本 | `src/task1_early_waker.py` | 标准化模块脚本 |
+| 最终脚本 | `src/task1_final.py` | 整合方案A+方案B的严格建模流程 |
+| 参考脚本 | `run_task1_fixed.py` | 方案A的独立运行脚本 |
+| 参考脚本 | `src/task1_early_waker.py` | 标准化模块脚本 |
 | 清洗数据 | `outputs/preprocess/Data_clean.csv` | 缺失值填充后、编码前的清洗数据 |
+| 预处理脚本 | `src/preprocess.py` | 数据清洗 + 编码 + 划分 |
