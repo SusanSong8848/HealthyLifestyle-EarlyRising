@@ -28,16 +28,16 @@ env/
 .DS_Store
 Thumbs.db
 
-# Output files (optional, uncomment to ignore generated results)
-# outputs/*.csv
-# outputs/*.png
+# Output files - generated results, models, plots
+outputs/
 
-# Data (keep raw data tracked, but not copies)
-# data/*.csv
+# Data files - too large for git
+datas.csv
+*.csv
+*.pkl
 
 # Logs
 *.log
-C:\TEMP\cline\
 
 # Clinerules
-.clinerules
+.clinerules/
