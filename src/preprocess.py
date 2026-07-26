@@ -6,6 +6,7 @@ Step 3: Data Preprocessing
 - Numeric scaling
 - Health_Score discretization for Task 2
 - Train/validation split
+- Export cleaned data as Data_clean.csv
 """
 import os
 import sys
@@ -33,21 +34,20 @@ print("Step 3: Data Preprocessing")
 print("=" * 60)
 
 # 1. Load raw data
-print("\n[1/8] Loading raw data...")
+print("\n[1/9] Loading raw data...")
 df = pd.read_csv(DATA_PATH)
 print(f"  Shape: {df.shape}")
 
 # 2. Time feature conversion: "HH:MM" -> total minutes since midnight
-print("\n[2/8] Converting time features (Wake_Up_Time, Sleep_Time) to minutes...")
+print("\n[2/9] Converting time features (Wake_Up_Time, Sleep_Time) to minutes...")
 for col in TIME_COLUMNS:
     if col in df.columns:
-        # Split "H:MM" or "HH:MM"
         parts = df[col].str.split(":", expand=True).astype(float)
         df[col + "_Minutes"] = parts[0] * 60 + parts[1]
         print(f"  {col}: converted to {col}_Minutes (range: {df[col+'_Minutes'].min():.0f} - {df[col+'_Minutes'].max():.0f})")
 
 # 3. Handle missing values
-print("\n[3/8] Handling missing values...")
+print("\n[3/9] Handling missing values...")
 
 # 3a. Check Exercise_Type and Workout_Intensity: when Exercise_Frequency_Per_Week == 0,
 #     these should logically be "None"
@@ -61,21 +61,33 @@ for col in ["Exercise_Type", "Workout_Intensity"]:
     df[col] = df[col].fillna(mode_val)
     print(f"  {col}: remaining NA filled with mode='{mode_val}'")
 
-# 3b. Alcohol_Consumption: 30% missing. Create "Unknown" category to preserve information
+# 3b. Alcohol_Consumption: ~30% missing. Create "Unknown" category to preserve information
 df["Alcohol_Consumption"] = df["Alcohol_Consumption"].fillna("Unknown")
-print(f"  Alcohol_Consumption: filled 30.14% NA with 'Unknown'")
+print(f"  Alcohol_Consumption: filled NA with 'Unknown'")
 
 # Verify no missing values remain
 remaining_na = df.isnull().sum().sum()
 print(f"  Remaining missing values after imputation: {remaining_na}")
 
-# 4. Encode categorical features
-print("\n[4/8] Encoding categorical features...")
+# 4. Export full cleaned dataset BEFORE encoding (human-readable)
+print("\n[4/9] Exporting cleaned dataset (Data_clean.csv)...")
+clean_df = df.copy()
 
-# Identify actual categorical columns in df (some may have been converted)
+# Add derived time columns
+for col in TIME_COLUMNS:
+    if col + "_Minutes" in df.columns:
+        clean_df[col + "_Minutes"] = df[col + "_Minutes"]
+
+clean_path = os.path.join(OUTPUT_PREP, "Data_clean.csv")
+clean_df.to_csv(clean_path, index=False)
+print(f"  Data_clean.csv saved: {clean_path}")
+print(f"  Rows: {len(clean_df)}, Columns: {len(clean_df.columns)}")
+
+# 5. Encode categorical features
+print("\n[5/9] Encoding categorical features...")
+
 cat_cols_in_df = [c for c in CATEGORICAL_COLUMNS if c in df.columns
                   and c not in [TARGET_TASK1, TARGET_TASK2, TARGET_TASK3, "Wellness_Category"]]
-# Add Alcohol_Consumption and Exercise_Type if not already in list
 for c in ["Alcohol_Consumption", "Exercise_Type", "Workout_Intensity"]:
     if c not in cat_cols_in_df and c in df.columns:
         cat_cols_in_df.append(c)
@@ -92,8 +104,8 @@ for col in cat_cols_in_df:
 
 print(f"  Total categorical features encoded: {len(cat_cols_in_df)}")
 
-# 5. Encode target variables
-print("\n[5/8] Encoding target variables...")
+# 6. Encode target variables
+print("\n[6/9] Encoding target variables...")
 # Task 1: Early_Waker (Yes/No -> 1/0)
 df_encoded["Early_Waker_Encoded"] = df_encoded[TARGET_TASK1].map({"Yes": 1, "No": 0})
 
@@ -116,35 +128,25 @@ wc_le = LabelEncoder()
 df_encoded["Wellness_Category_Encoded"] = wc_le.fit_transform(df_encoded[TARGET_TASK3])
 print(f"\n  Wellness_Category mapping: {dict(zip(wc_le.classes_, wc_le.transform(wc_le.classes_)))}")
 
-# Save encoders
 encoders["Health_Score_LabelEncoder"] = he_le
 encoders["Wellness_Category_LabelEncoder"] = wc_le
 with open(os.path.join(OUTPUT_PREP, "encoders.pkl"), "wb") as f:
     pickle.dump(encoders, f)
 
-# 6. Build feature matrix
-print("\n[6/8] Building feature matrix...")
+# 7. Build feature matrix
+print("\n[7/9] Building feature matrix...")
 
-# Numeric columns (excluding targets and ID)
 num_cols = [c for c in NUMERIC_COLUMNS if c in df_encoded.columns
             and c not in [TARGET_TASK1, TARGET_TASK2, TARGET_TASK3,
                           "Wellness_Category", ID_COLUMN]]
-# Add time minutes columns
 time_min_cols = [c + "_Minutes" for c in TIME_COLUMNS if c + "_Minutes" in df_encoded.columns]
 num_cols = [c for c in num_cols if c not in TIME_COLUMNS] + time_min_cols
 
-# Encoded categorical columns
 enc_cat_cols = [c + "_Encoded" for c in cat_cols_in_df if c + "_Encoded" in df_encoded.columns]
-
-# Exclude highly leaky features: Healthy_Aging_Score (0.94 corr with Health_Score!)
-# and Fitness_Level (encoded separately, correlated with Health_Score)
-# We'll keep Healthy_Aging_Score for Task 1 but exclude for Task 2/3
-leaky_features_task2 = ["Fitness_Level_Encoded"]
-# Healthy_Aging_Score is NOT in numeric (it's in FITNESS_FEATURES via config)
 
 feat_cols = num_cols + enc_cat_cols
 feat_cols = [c for c in feat_cols if c in df_encoded.columns]
-feat_cols = list(dict.fromkeys(feat_cols))  # deduplicate while preserving order
+feat_cols = list(dict.fromkeys(feat_cols))
 
 print(f"  Total feature columns: {len(feat_cols)}")
 
@@ -154,19 +156,13 @@ y2 = df_encoded["Health_Score_Category_Encoded"]
 y3 = df_encoded["Wellness_Category_Encoded"]
 person_ids = df_encoded[ID_COLUMN]
 
-# 7. Train/validation split
-print("\n[7/8] Splitting data (80% train, 20% validation)...")
-# Use stratified split for all three targets
+# 8. Train/validation split
+print("\n[8/9] Splitting data (80% train, 20% validation)...")
 X_train, X_val, y1_train, y1_val, y2_train, y2_val, y3_train, y3_val, ids_train, ids_val = train_test_split(
     X, y1, y2, y3, person_ids,
     test_size=TEST_SIZE,
     random_state=RANDOM_STATE,
-    stratify=y3  # stratify by Wellness_Category (most balanced)
-)
-
-# Split also by Task1 for evaluation
-_, _, y1_train_strat, _ = train_test_split(
-    X, y1, test_size=TEST_SIZE, random_state=RANDOM_STATE, stratify=y1
+    stratify=y3
 )
 
 print(f"  Train set: {X_train.shape[0]} samples")
@@ -178,16 +174,14 @@ print(f"  y2 (Health_Score) val:   {y2_val.value_counts().to_dict()}")
 print(f"  y3 (Wellness) train: {y3_train.value_counts().to_dict()}")
 print(f"  y3 (Wellness) val:   {y3_val.value_counts().to_dict()}")
 
-# 8. Scale numeric features
-print("\n[8/8] Scaling numeric features...")
+# 9. Scale numeric features
+print("\n[9/9] Scaling numeric features...")
 scaler = StandardScaler()
 
-# Identify which feature columns are numeric (not encoded categoricals)
 actual_num_cols = [c for c in num_cols if c in feat_cols]
 X_train_num = X_train[actual_num_cols]
 X_val_num = X_val[actual_num_cols]
 
-# Fit on train, transform both
 scaler.fit(X_train_num)
 
 X_train_scaled = X_train.copy()
@@ -195,7 +189,6 @@ X_val_scaled = X_val.copy()
 X_train_scaled[actual_num_cols] = scaler.transform(X_train_num)
 X_val_scaled[actual_num_cols] = scaler.transform(X_val_num)
 
-# Save scaler
 with open(os.path.join(OUTPUT_PREP, "scaler.pkl"), "wb") as f:
     pickle.dump(scaler, f)
 
@@ -217,11 +210,10 @@ processed = {
     "enc_cat_cols": enc_cat_cols,
 }
 
-# Save as pickle for fast reload
 with open(os.path.join(OUTPUT_PREP, "processed_data.pkl"), "wb") as f:
     pickle.dump(processed, f)
 
-# Also save as CSV for inspection
+# Save train/val CSVs for inspection
 df_train = pd.DataFrame(X_train_scaled, columns=feat_cols)
 df_train[ID_COLUMN] = ids_train.values
 df_train["Early_Waker"] = y1_train.values
