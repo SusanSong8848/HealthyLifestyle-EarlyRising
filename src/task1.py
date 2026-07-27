@@ -15,7 +15,7 @@ warnings.filterwarnings("ignore")
 
 from sklearn.linear_model import LogisticRegression
 from sklearn.ensemble import RandomForestClassifier, VotingClassifier
-from sklearn.model_selection import StratifiedKFold, train_test_split
+from sklearn.model_selection import StratifiedKFold
 from sklearn.preprocessing import StandardScaler, LabelEncoder
 from sklearn.metrics import (
     accuracy_score, balanced_accuracy_score, f1_score,
@@ -26,9 +26,10 @@ import lightgbm as lgb
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from config import (
-    DATA_PATH, OUTPUT_DIR, TASK1_DIR,
+    DATA_PATH, OUTPUT_DIR, TASK1_DIR, SPLITS_DIR, ID_COLUMN,
     RANDOM_STATE, TASK1_LEAKY_FEATURES,
 )
+from clean_utils import load_manifest_split_indices
 
 print("=" * 65)
 print("Task 1 — Early Waker Classification (v3 FIXED)")
@@ -39,7 +40,7 @@ print("=" * 65)
 
 # ==================== 1. Load raw data ====================
 print("\n[1/6] Loading raw data...")
-raw = pd.read_csv(DATA_PATH)
+raw = pd.read_csv(DATA_PATH, dtype={ID_COLUMN: "string"})
 print(f"  Shape: {raw.shape}")
 
 # ==================== 2. Data cleaning ====================
@@ -113,17 +114,21 @@ print(f"  Categorical features: {len(available_cat)}")
 print(f"  Total features: {len(available_num) + len(available_cat)}")
 print(f"  Excluded: {EXCLUDED_COLUMNS}")
 
-# ==================== 4. Stratified split ====================
-print("\n[4/6] Stratified split (80/20, stratify=y)...")
+# ==================== 4. Shared split manifest ====================
+print("\n[4/6] Loading shared split manifest...")
 
-idx = np.arange(len(raw))
-train_idx, test_idx = train_test_split(
-    idx, test_size=0.2, random_state=RANDOM_STATE, stratify=y
+split_manifest_path = os.path.join(SPLITS_DIR, "split_manifest.csv")
+train_idx, test_idx = load_manifest_split_indices(
+    raw,
+    split_manifest_path,
+    id_column=ID_COLUMN,
+    label_checks={"task1_label": raw["Early_Waker"]},
 )
 
-print(f"  Train: {len(train_idx)}, Test: {len(test_idx)}")
+print(f"  Manifest: {split_manifest_path}")
+print(f"  Train: {len(train_idx)}, Validation: {len(test_idx)}")
 print(f"  y_train: No={sum(y.iloc[train_idx]==0)}, Yes={sum(y.iloc[train_idx]==1)}")
-print(f"  y_test:  No={sum(y.iloc[test_idx]==0)}, Yes={sum(y.iloc[test_idx]==1)}")
+print(f"  y_val:   No={sum(y.iloc[test_idx]==0)}, Yes={sum(y.iloc[test_idx]==1)}")
 
 # ==================== 5. 5-Fold CV with in-fold encoding ====================
 print("\n[5/6] 5-Fold CV with in-fold encoding (leak-free pipeline)...")
@@ -209,7 +214,7 @@ for name in cv_results:
 print(f"\n  Best OOF Model: {best_model_name} (OOF ACC1={best_oof_acc:.4f})")
 
 # ==================== 6. Final test evaluation + Ensemble ====================
-print("\n[6/6] Final test set evaluation + Voting Ensemble...")
+print("\n[6/6] Validation set evaluation + Voting Ensemble...")
 
 X_train_full = X_all.iloc[train_idx].copy()
 X_test_full = X_all.iloc[test_idx].copy()
@@ -339,7 +344,7 @@ with open(os.path.join(TASK1_DIR, "metrics.txt"), "w", encoding="utf-8") as f:
     f.write("--- 5-Fold CV Results (OOF) ---\n")
     for name, res in cv_results.items():
         f.write(f"  {name}: ACC={np.mean(res['acc']):.4f}, BalAcc={np.mean(res['bal_acc']):.4f}, F1={np.mean(res['f1_yes']):.4f}, Recall={np.mean(res['recall_yes']):.4f}\n")
-    f.write("\n--- Test Set Results ---\n")
+    f.write("\n--- Validation Set Results ---\n")
     for name, r in all_test_results.items():
         f.write(f"  {name}: ACC={r['ACC1']:.4f}, BalAcc={r['Balanced_Accuracy']:.4f}, F1={r['F1_Yes']:.4f}, Recall={r['Recall_Yes']:.4f}\n")
     f.write("\n--- Top 15 Features ---\n")
