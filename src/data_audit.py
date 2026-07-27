@@ -40,7 +40,7 @@ if __name__ == "__main__":
 
     # 1. Original data
     if os.path.exists(DATA_PATH):
-        r = audit_file(DATA_PATH, "原始数据 (datas.csv)")
+        r = audit_file(DATA_PATH, "原始数据 (A题数据集.csv)")
         results.append(r)
         print(f"\n  [原始数据] {r['rows']}×{r['cols']}, 缺失={r['missing_cells']}")
 
