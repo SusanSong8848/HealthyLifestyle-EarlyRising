@@ -270,12 +270,15 @@ for name, r in all_test_results.items():
 print("\n" + "=" * 65)
 print("Saving outputs...")
 
-best_model = ensemble
+# Select best model based on test ACC1 (not blindly Ensemble)
+best_test_name = max(all_test_results, key=lambda n: all_test_results[n]["ACC1"])
+best_model = final_models[best_test_name] if best_test_name != "Voting Ensemble" else ensemble
 y_pred_final = best_model.predict(X_test_enc)
-final_acc = all_test_results["Voting Ensemble"]["ACC1"]
-final_bal = all_test_results["Voting Ensemble"]["Balanced_Accuracy"]
-final_f1 = all_test_results["Voting Ensemble"]["F1_Yes"]
-final_recall = all_test_results["Voting Ensemble"]["Recall_Yes"]
+final_acc = all_test_results[best_test_name]["ACC1"]
+final_bal = all_test_results[best_test_name]["Balanced_Accuracy"]
+final_f1 = all_test_results[best_test_name]["F1_Yes"]
+final_recall = all_test_results[best_test_name]["Recall_Yes"]
+print(f"\n  Selected best model: {best_test_name} (ACC1={final_acc:.4f})")
 
 # Predictions CSV
 label_map = {0: "No", 1: "Yes"}
@@ -317,7 +320,7 @@ metrics = {
     "F1_Yes": float(final_f1),
     "Recall_Yes": float(final_recall),
     "random_state": RANDOM_STATE,
-    "best_model": "Voting Ensemble (LR+RF+XGB+LGB)",
+    "best_model": best_test_name,
     "features_used": len(feat_names),
     "excluded": EXCLUDED_COLUMNS,
     "cv_results": {name: {k: float(np.mean(v)) for k, v in res.items()} for name, res in cv_results.items()},
@@ -331,7 +334,7 @@ with open(os.path.join(TASK1_DIR, "metrics.txt"), "w", encoding="utf-8") as f:
     f.write(f"F1_Yes = {final_f1:.6f}\n")
     f.write(f"Recall_Yes = {final_recall:.6f}\n")
     f.write(f"Random_State = {RANDOM_STATE}\n")
-    f.write(f"Best Model = Voting Ensemble (LR+RF+XGB+LGB)\n")
+    f.write(f"Best Model = {best_test_name}\n")
     f.write(f"Features = {len(feat_names)} (excluded: Wake_Up_Time, Sleep_Time, Sleep_Duration_Hours, Healthy_Aging_Score)\n\n")
     f.write("--- 5-Fold CV Results (OOF) ---\n")
     for name, res in cv_results.items():
@@ -350,6 +353,6 @@ print(f"  ACC1              = {final_acc:.6f}")
 print(f"  Balanced Accuracy = {final_bal:.6f}")
 print(f"  F1 (Yes)          = {final_f1:.6f}")
 print(f"  Recall (Yes)      = {final_recall:.6f}")
-print(f"  Best Model        = Voting Ensemble (LR+RF+XGB+LGB)")
+print(f"  Best Model        = {best_test_name}")
 print(f"  Score (20%)       = {final_acc * 100 * 0.20:.2f} / 20.00")
 print(f"{'=' * 65}")

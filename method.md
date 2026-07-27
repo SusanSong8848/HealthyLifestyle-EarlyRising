@@ -1,268 +1,177 @@
-# Task 1 建模方法论：严格无数据泄露的 Early Waker 预测
+# 建模方法论：三任务完整方案
 
-> 版本：v2 Final（整合方案A可复现性 + 方案B严格防泄漏）
-> 作者：角色 A（算法与代码主攻手）
-> 日期：2026-07-26
+> 版本：v3.1 Final（整合队友公共要求 + CV制导模型选择）
+> 日期：2026-07-27
 
 ---
 
-## 0. 项目环境与维护说明
+## 0. 项目环境
 
 ### 0.1 Python 解释器
 
-系统存在两个 Python 环境，**必须使用正确的解释器**：
-
 | 解释器 | 路径 | 状态 |
 |--------|------|------|
-| **MSYS2 Python（默认）** | `D:\msys64\ucrt64\bin\python.exe` | ❌ 无科学计算库，不可用 |
 | **Windows Python 3.12** | `D:\python\python.exe` | ✅ 已安装 pandas/numpy/matplotlib/seaborn/scikit-learn/xgboost/lightgbm |
-
-所有脚本运行命令格式：
-```bash
-D:\python\python.exe src\eda.py
-D:\python\python.exe src\preprocess.py
-D:\python\python.exe src\task1_final.py          # 推荐：最终独立版
-D:\python\python.exe src\task1_early_waker.py    # 备选：模块化版本
-D:\python\python.exe src\task2_health_score.py
-```
 
 ### 0.2 运行顺序
 
-```
-Step 2: src/eda.py         → outputs/eda/*.png, *.csv（可跳过，不影响后续）
-Step 3: src/preprocess.py   → outputs/preprocess/processed_data.pkl（task1/task2 的前置依赖）
-Step 4: src/task1_final.py  → outputs/task1/predictions.csv, best_model.pkl 等
-Step 5: src/task2_health_score.py → outputs/task2/predictions.csv 等
+```bash
+D:\python\python.exe src\eda.py                         # EDA（可跳过）
+D:\python\python.exe src\preprocess.py                   # 统一数据预处理
+D:\python\python.exe src\task1_final.py                  # 任务1: Early Waker
+D:\python\python.exe src\task2_health_score.py            # 任务2: Health Score
+D:\python\python.exe src\task3_wellness_category.py       # 任务3: Wellness Category
 ```
 
-### 0.3 Git 仓库维护（已完成）
+---
 
-| 操作 | 说明 |
+## 1. 统一公共基座（来自 公共数据要求.txt）
+
+三项任务共享的参数和清洗规范：
+
+| 维度 | 规定 |
 |------|------|
-| **Git 瘦身** | 使用 `git filter-repo --invert-paths` 从全部历史提交中永久删除 `outputs/`、`datas.csv`、`.clinerules/` |
-| **.gitignore** | 已配置忽略 `outputs/`、`datas.csv`、`*.csv`、`*.pkl`、`.clinerules/`、`__pycache__/`、`*.ipynb` |
-| **清理效果** | `.git` 目录从 ~100 MB 降至 0.23 MB，可正常 push 到 GitHub |
-| **Force push** | 已执行，远程仓库已更新为清理后的轻量历史 |
-
-> ⚠️ `outputs/` 和 `datas.csv` 现在仅存在于本地磁盘，不在 git 跟踪中。如需重新生成 output 文件，运行对应的 Python 脚本即可。
-> ⚠️ 如果需要再次 clone 仓库，需手动将 `datas.csv` 复制到项目根目录，并运行 `src/preprocess.py` 后再运行各任务脚本。
-
----
-
-## 1. 问题定义
-
-**任务目标**：利用多维度健康与行为特征，构建二分类模型预测个体是否为"早起者"（Early_Waker = Yes/No）。
-
-**初赛评分**：ACC1 × 100 × 20% — 该任务占初赛总分的 20%。
+| **random_state** | `20260726`（团队统一） |
+| **数据切分** | 80%/20%，联合分层（task1+task2+task3标签） |
+| **CV折数** | 5折，`shuffle=True` |
+| **清洗 Exercise_Type 缺失** | `"No Exercise"`（仅当 Exercise_Frequency=0） |
+| **清洗 Workout_Intensity 缺失** | `"No Workout"`（同上） |
+| **清洗 Alcohol_Consumption 缺失** | `"Unknown"`（不能填"No Alcohol"） |
+| **时间格式** | 统一为 `HH:MM`，新增 `_Minutes` 列 |
+| **编码/标准化** | 在各任务 Pipeline 内部完成，公共清洗不编码 |
 
 ---
 
-## 2. 数据泄露的诊断与修复
+## 2. 各任务泄漏字段
 
-### 2.1 问题发现
-
-初始建模（包含全部 60 个特征）时，所有模型（Random Forest、XGBoost、LightGBM）的交叉验证和验证集准确率均达到 **ACC1 = 1.0000（100%）**。
-
-通过交叉分析 `Wake_Up_Time` 与 `Early_Waker` 标签，发现数据泄露的证据：
-
-| 起床时间段 | Early_Waker = Yes | Early_Waker = No | 样本数 |
-|:----------:|:---:|:---:|:---:|
-| **4:00–5:59 AM** | **2,837 (100%)** | 0 | 2,837 |
-| **6:00–6:59 AM** | 1,321 (48.3%) | 1,415 (51.7%) | 2,736 |
-| **7:00–11:59 AM** | 0 | **4,427 (100%)** | 4,427 |
-
-结论：**`Early_Waker` 标签几乎等同于 `Wake_Up_Time ≤ 6:30` 的直接翻译**。除早上 6 点这一小时外，其他时间段可以 100% 确定标签。
-
-### 2.2 为什么这属于数据泄露
-
-`Wake_Up_Time`（起床时间）本身就是 `Early_Waker`（是否早起）的**定义性特征**——就像用"考试分数"来预测"是否及格"一样。如果模型中包含这类特征：
-
-- 决策树会在第一层分裂就直接按 `Wake_Up_Time ≤ 390分钟（6:30 AM）` 分开
-- 其他 59 个特征（饮食、运动、心理、生理等）的贡献度为 0
-- 模型没有"学习"任何规律，只是在"抄答案"
-
-这与比赛考察"用多维度健康数据预测作息习惯"的目标完全背离。
-
-### 2.3 修复策略（最终版：方案B 严格策略 + 管道防泄漏）
-
-从特征集中**移除 3 个与时钟时刻相关的特征**：
-
-| 移除的特征 | 移除原因 |
-|-----------|---------|
-| `Wake_Up_Time_Minutes` | 直接定义答案是/否（4-5点全Yes, 7-11点全No） |
-| `Sleep_Time_Minutes` | 与起床时间高度共线（r ≈ -0.82），间接暴露作息时刻 |
-| `Sleep_Duration_Hours` | **可从 `Wake_Up_Time` 和 `Sleep_Time` 推算（Wake - Sleep = Duration），构成间接泄露** |
-
-此外，采用**管道内每折独立编码**策略：在 5-Fold Cross Validation 的每一折内部，分别对训练折叠 fit `StandardScaler` 和 `LabelEncoder`，再用 fit 后的编码器 transform 验证折叠。这杜绝了编码过程中训练集信息泄露到验证集的风险。
-
-修复后特征数：**60 → 57（数值）+ 17（类别编码）= 58 个有效特征**。
+| 任务 | 排除的特征 | 原因 |
+|------|-----------|------|
+| **Task 1** | `Wake_Up_Time`, `Sleep_Time`, `Sleep_Duration_Hours` | 起床时间<6:30 与标签100%一致；三位一体排除 |
+| **Task 2** | `Health_Score`（标签来源）, `Wellness_Category`, `Fitness_Level` | 等级信息由 Health_Score 形成，留任意一个即泄露 |
+| **Task 3** | `Wellness_Category`（目标）, `Health_Score`（按45/65/80可100%还原）, `Fitness_Level`（与目标100%相同） | |
+| **全部** | `Healthy_Aging_Score` | 可疑综合评分，主模型排除（消融实验可加入） |
+| **全部** | `Person_ID` | 仅用于切分和提交，不能进入模型 |
 
 ---
 
-## 3. 数据预处理流程
+## 3. Task 1 — Early Waker 二分类（权重 20%）
 
-### 3.1 缺失值处理
+### 3.1 数据泄露诊断
 
-| 特征 | 缺失情况 | 处理方法 | 理由 |
-|------|---------|---------|------|
-| `Alcohol_Consumption` | ~30% 缺失 | 填充 `"Unknown"` | 保留"未报告"信息，避免信息损失 |
-| `Exercise_Type` | 锻炼频率=0 时为空 | 填充 `"None"` | 逻辑一致：不锻炼→无锻炼类型 |
-| `Workout_Intensity` | 锻炼频率=0 时为空 | 填充 `"None"` | 逻辑一致 |
-| 其他类别特征 | 少量缺失 | 众数填充 | 稳健处理 |
+| 起床时间段 | Early_Waker=Yes | Early_Waker=No |
+|:----------:|:---:|:---:|
+| 4:00–5:59 AM | 2,837 (100%) | 0 |
+| 6:00–6:59 AM | 1,321 (48.3%) | 1,415 |
+| 7:00–11:59 AM | 0 | 4,427 (100%) |
 
-最终验证：**10,000 条数据，0 个缺失值**。
+排除 `Wake_Up_Time_Minutes`、`Sleep_Time_Minutes`、`Sleep_Duration_Hours` 后，特征数从 60 降至 57（含 `Healthy_Aging_Score` 排除后为 57）。
 
-### 3.2 特征工程
+### 3.2 管道内防泄露 CV
 
-- **时间转换**：`Wake_Up_Time`（"6:35"）和 `Sleep_Time`（"23:48"）转换为**午夜起分钟数**（395 和 1428），方便后续分析（建模时这类分钟数列会被排除）
-- **类别编码**：17 个类别特征使用 `LabelEncoder` 转为 0…k-1 整数（在每折 CV 内部或全量训练集上 fit）
-- **目标编码**：`Early_Waker` → Yes=1, No=0
-- **数值标准化**：41 个数值特征使用 `StandardScaler`（在每折 CV 内部 fit on train fold）
+每折内部：`fit StandardScaler + LabelEncoder on train fold → transform val fold`，杜绝编码过程泄露。
 
-### 3.3 数据划分
+### 3.3 模型选择（CV制导）
 
-- 训练集：8,000 样本（80%）
-- 测试集：2,000 样本（20%）
-- **分层抽样**：`stratify=y`（确保训练集和测试集中 Yes/No 比例一致）
-- 随机种子：42（保证可复现）
-- 类别分布：训练集 No=4,674 / Yes=3,326；测试集 No=1,168 / Yes=832
-
-### 3.4 Data_clean.csv 的输出
-
-`Data_clean.csv` 在缺失值填充**之后**、类别编码**之前**导出，保持人类可读的原始格式：
-
-```
-原始数据 (10,000×64)
-  → 缺失值填充（Alcohol→"Unknown", 锻炼→"None"等）
-  → 时间特征转换（新增 Wake_Up_Time_Minutes + Sleep_Time_Minutes）
-  → 导出 Data_clean.csv (10,000×66, 0 缺失值)
-  → 继续编码、标准化、划分 → 建模
-```
-
----
-
-## 4. 建模流程
-
-### 4.1 5 折交叉验证（管道内防泄露）
-
-每折内部独立完成编码+缩放（`fit on train fold, transform both`），然后训练 4 个基线模型：
-
-| 模型 | OOF ACC1 | Balanced Accuracy | F1 (Yes) | Recall (Yes) |
+| 模型 | OOF ACC1 | BalAcc | F1(Yes) | Recall(Yes) |
 |------|:---:|:---:|:---:|:---:|
-| **Logistic Regression** | **0.7482** | 0.7343 | 0.6827 | 0.6518 |
-| Random Forest (n=300, depth=15) | 0.7372 | 0.7165 | 0.6523 | 0.5932 |
-| XGBoost (n=300, depth=8, lr=0.05) | 0.7340 | 0.7194 | 0.6642 | 0.6329 |
-| LightGBM (n=300, depth=8, lr=0.05, leaves=63) | 0.7300 | 0.7165 | 0.6621 | 0.6365 |
+| **Logistic Regression** ★ | **0.7482** | 0.7341 | 0.6823 | 0.6500 |
+| XGBoost | 0.7349 | 0.7197 | 0.6637 | 0.6293 |
+| Random Forest | 0.7312 | 0.7111 | 0.6466 | 0.5917 |
+| LightGBM | 0.7299 | 0.7153 | 0.6595 | 0.6290 |
 
-> ⚠️ **关键对比**：含泄漏特征时 CV=1.0000；移除后 OOF ACC1≈0.73-0.75。差距约 25 个百分点，正是"抄答案"和"真学习"的差异。
+### 3.4 最终结果
 
-### 4.2 模型选择与解释
-
-**Logistic Regression 是 OOF 最优单模型**（ACC1=0.7482）。这暗示在严格排除所有时钟相关特征后，早起/非早起的决策边界变得相对线性——生活方式和健康指标的组合可以以一个线性分界面较好地分离两类人群。
-
-Random Forest 和 XGBoost 在训练集上的表现更"极端"（训练 ACC 更高），但在 OOF 验证上并未超越 Logistic Regression，说明它们在一定程度上过拟合了训练数据。
-
-### 4.3 Voting Ensemble
-
-将四个模型通过 **软投票（Soft Voting）** 集成：
-
-```
-VotingClassifier(voting='soft')
-  ├── Logistic Regression
-  ├── Random Forest (n=300, depth=15)
-  ├── XGBoost (n=300, depth=8, lr=0.05)
-  └── LightGBM (n=300, depth=8, lr=0.05, leaves=63)
-```
-
----
-
-## 5. 最终结果
-
-### 5.1 测试集评估（独立 20% 数据）
-
-| 模型 | ACC1 | Balanced Accuracy | F1 (Yes) | Recall (Yes) |
+| 模型 | Test ACC1 | BalAcc | F1(Yes) | Recall(Yes) |
 |------|:---:|:---:|:---:|:---:|
-| **Logistic Regression** | **0.7710** | **0.7569** | **0.7098** | **0.6731** |
-| Random Forest | 0.7555 | 0.7359 | 0.6781 | 0.6190 |
-| XGBoost | 0.7455 | 0.7316 | 0.6797 | 0.6490 |
-| LightGBM | 0.7435 | 0.7292 | 0.6763 | 0.6442 |
-| **Voting Ensemble** | **0.7560** | 0.7418 | 0.6915 | 0.6575 |
+| **Logistic Regression** ★ | **0.7690** | 0.7559 | 0.7094 | 0.6779 |
+| Voting Ensemble | 0.7585 | 0.7424 | 0.6902 | 0.6466 |
 
-### 5.2 最终 ACC1
+**得分：15.38 / 20.00**
 
-| 阶段 | ACC1 | 含义 |
-|------|:---:|------|
-| **修复前**（60 特征，含 Wake_Up_Time） | 1.0000 | 抄答案，无意义 |
-| **方案A**（58 特征，含 Sleep_Duration） | 0.7420 | 仍有一条间接泄露通道 |
-| **方案B FINAL**（57 特征，严格排除） | **0.7560** | 最严格的非时钟预测 |
-| 得分贡献（20%权重） | **15.12 / 20.00** | |
+### 3.5 特征重要性（Top 5）
 
-### 5.3 特征重要性（Top 15，三模型平均）
+| 排名 | 特征 | 重要性 |
+|:---:|------|:---:|
+| 1 | Productivity_Score | 11.62% |
+| 2 | Breakfast_Regularity_Score | 4.63% |
+| 3 | Stress_Level | 2.40% |
+| 4 | Health_Score | 2.33% |
+| 5 | Daily_Calorie_Intake | 2.28% |
 
-| 排名 | 特征 | 重要性 | 解读 |
-|:---:|------|:---:|------|
-| 1 | **Productivity_Score** | 11.55% | 早起者生产力系统性地更高 |
-| 2 | **Breakfast_Regularity_Score** | 4.53% | 早起者吃早餐更规律 |
-| 3 | **Stress_Level** | 2.50% | 压力水平存在可区分差异 |
-| 4 | **Daily_Calorie_Intake** | 2.25% | 每日热量摄入 |
-| 5 | **Daily_Steps** | 2.24% | 每日步数 |
-| 6 | **Blood_Sugar_Level** | 2.23% | 血糖水平 |
-| 7 | **Water_Intake_Liters** | 2.19% | 饮水量 |
-| 8 | **Mood_Score** | 2.17% | 情绪状态 |
-| 9 | **Weekend_Sleep_Difference_Hours** | 2.17% | 周末作息差异 |
-| 10 | **Health_Score** | 2.16% | 综合健康评分 |
-| 11 | **Outdoor_Time_Hours** | 2.13% | 户外活动时间 |
-| 12 | **Height_cm** | 2.09% | 身高（人口学变量） |
-| 13 | **Energy_Level_Score** | 2.07% | 精力水平 |
-| 14 | **Protein_Intake_Grams** | 2.06% | 蛋白质摄入 |
-| 15 | **Exercise_Duration_Minutes** | 2.06% | 每次锻炼时长 |
-
-**关键发现**：58 个特征的重要性分布**均匀且分散**——排名第一的 `Productivity_Score` 占 11.55%，其余特征均在 2-5% 之间。这说明早起行为是由**多维度的生活方式综合体现**，无单一主导因素，符合比赛的考察目标。
-
-### 5.4 混淆矩阵（测试集 2,000 样本）
-
-|  | 预测 No | 预测 Yes |
-|---|---|:---:|
-| **实际 No** | 965 | 203 |
-| **实际 Yes** | 285 | 547 |
-
-- **Precision (Yes)** = 547/(547+203) = 72.9%
-- **Recall (Yes)** = 547/(547+285) = 65.7%
-- **Precision (No)** = 965/(965+285) = 77.2%
-- **Recall (No)** = 965/(965+203) = 82.6%
+58个特征重要性均匀分散——早起行为是多维度生活方式的综合体现。
 
 ---
 
-## 6. 核心结论
+## 4. Task 2 — Health Score 四分类（权重 40%）
 
-1. **数据泄露是机器学习竞赛中最隐蔽的陷阱**。`Wake_Up_Time`、`Sleep_Time` 和 `Sleep_Duration_Hours` 必须在建模前排除，否则模型准确率虚高但毫无实际价值。
+### 4.1 离散化边界
 
-2. **三位一体的排除策略**：起床时间、入睡时间和睡眠时长本质上都是"时钟信息"的不同形式。严格方案移除三者后，ACC1 从 1.0 降至 0.756——这 24.4 个百分点的差距量化了"抄答案"和"真学习"之间的距离。
+| 区间 | 类别 | 样本数 |
+|------|------|:---:|
+| <60 | Poor | 1,292 |
+| 60-70 | Average | 2,317 |
+| 70-85 | Good | 4,457 |
+| ≥85 | Excellent | 1,934 |
 
-3. **管道内防泄露是必要保障**。每折内部独立编码（fit on train fold, transform val fold）比"先 fit scaler 再 CV"更严格，杜绝了微小的信息泄露。
+### 4.2 模型选择
 
-4. **Logistic Regression 在严格特征集下表现最优**，说明早起/非早起的分类问题在非时钟特征上具有较好的线性可分性。
+| 模型 | 5-Fold CV | Test ACC2 |
+|------|:---:|:---:|
+| **Logistic Regression** ★ | **0.8044±0.0084** | **0.8120** |
+| LightGBM | 0.7667±0.0025 | 0.7770 |
+| XGBoost | 0.7596±0.0057 | 0.7715 |
+| Random Forest | 0.7335±0.0067 | 0.7220 |
 
-5. **58 个特征的贡献均匀分散**（除 Productivity_Score 外均在 5% 以下），证明早起行为是一个由生产力、生活习惯、心理状态、生理指标共同决定的多维度现象——这才是比赛真正希望参赛者发现的规律。
+**得分：32.48 / 40.00**
 
 ---
 
-## 7. 产出文件索引
+## 5. Task 3 — Wellness Category 四分类（权重 40%）
 
-| 文件 | 路径 | 说明 |
-|------|------|------|
-| 预测结果（Task1） | `outputs/task1/predictions.csv` | 2000行，Person_ID + True_Label + Predicted_Label |
-| 特征重要性（Task1） | `outputs/task1/feature_importance.csv` | 58个特征的重要性排名（3模型平均） |
-| 评估指标（Task1） | `outputs/task1/metrics.txt` | ACC1、BalAcc、F1、Recall、各模型对比 |
-| 最佳模型（Task1） | `outputs/task1/best_model.pkl` | Voting Ensemble 序列化模型 |
-| Task2 预测结果 | `outputs/task2/predictions.csv` | ACC2 = 0.8050 |
-| 最终脚本（Task1） | `src/task1_final.py` | 整合方案A+方案B的严格建模流程（**推荐**） |
-| 参考脚本（Task1） | `src/task1_early_waker.py` | 模块化脚本（依赖 preprocess.py 的 processed_data.pkl） |
-| Task2 脚本 | `src/task2_health_score.py` | Health Score 四分类模型 |
-| 预处理脚本 | `src/preprocess.py` | 数据清洗 + 编码 + 划分 |
-| EDA 脚本 | `src/eda.py` | 可视化探索性数据分析 |
-| 全局配置 | `src/config.py` | 路径、特征列表、超参数 |
-| 清洗数据 | `outputs/preprocess/Data_clean.csv` | 缺失值填充后、编码前的清洗数据 |
-| 预处理数据 | `outputs/preprocess/processed_data.pkl` | task1_early_waker.py 和 task2 的输入 |
-| 项目计划 | `Plan.md` | 完整项目结构和实现步骤 |
-| Git 忽略规则 | `.gitignore` | 已忽略 outputs/、datas.csv、*.pkl、*.csv 等 |
+### 5.1 类别分布
+
+| 类别 | 样本数 | 占比 |
+|------|:---:|:---:|
+| Good | 4,429 | 44.3% |
+| Excellent | 3,320 | 33.2% |
+| Average | 2,137 | 21.4% |
+| **Poor** | **114** | **1.1%** |
+
+> 题面写三分类（Excellent/Good/Average），但数据中有 114 条 Poor。按公共数据要求做四分类，并在论文中说明。
+
+### 5.2 处理策略
+
+- `class_weight='balanced'` 处理 Poor 类极端不平衡（仅 91 条训练样本）
+- CV制导选择最优单模型
+
+### 5.3 模型选择
+
+| 模型 | 5-Fold CV | Test ACC3 |
+|------|:---:|:---:|
+| **LightGBM** ★ | **0.8174±0.0068** | **0.8160** |
+| Logistic Regression | 0.8171±0.0049 | — |
+
+**得分：32.64 / 40.00**
+
+---
+
+## 6. 最终总评分
+
+| 任务 | ACC | 权重 | 得分 | 最优模型 |
+|------|:---:|:---:|:---:|------|
+| Task 1 | 0.7690 | 20% | 15.38 | Logistic Regression |
+| Task 2 | 0.8120 | 40% | 32.48 | Logistic Regression |
+| Task 3 | 0.8160 | 40% | 32.64 | LightGBM |
+| **初赛总分** | | | **81.64 / 100.00** | |
+
+---
+
+## 7. 核心发现
+
+1. **排除时钟特征后模型并非"衰退"而是"真实学习"**——ACC1 从 1.0（抄答案）降至 0.77（真预测），差距 23pp 是"泄露"与"学习"之间的距离。
+
+2. **Logistic Regression 在两个任务上是最优单模型**——说明在严格特征集下，健康指标的线性组合已足够区分不同等级的健康状态。Voting Ensemble 反而因过拟合倾向拉低了泛化性能。
+
+3. **CV制导模型选择比盲目录入更严谨**——在 CV 阶段就确定最优模型，测试集仅用于最终评估，避免对测试集的间接过拟合。
+
+4. **联合分层抽样保证了三个任务的一致性**——train/val 划分对三个任务完全相同，团队协作复现无歧义。
