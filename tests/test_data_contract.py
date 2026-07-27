@@ -26,8 +26,18 @@ class TestDataContract(unittest.TestCase):
         self.assertEqual(len(self.df), 10000)
 
     def test_column_count(self):
-        """列数应为 66 (64 原始 + 2 分钟列)"""
-        self.assertIn(len(self.df.columns), [64, 66])
+        """列数必须为 66（64 个原始字段 + 2 个分钟衍生字段）"""
+        self.assertEqual(len(self.df.columns), 66)
+
+    def test_only_expected_columns_added(self):
+        """原始 64 列全部保留，且只新增两个分钟衍生字段"""
+        original_columns = list(self.raw.columns)
+        expected_added = {"Wake_Up_Time_Minutes", "Sleep_Time_Minutes"}
+        added_columns = set(self.df.columns) - set(original_columns)
+        removed_columns = set(original_columns) - set(self.df.columns)
+        self.assertEqual(removed_columns, set())
+        self.assertEqual(added_columns, expected_added)
+        self.assertEqual(list(self.df.columns[:len(original_columns)]), original_columns)
 
     def test_no_missing_cells(self):
         """不应有任何缺失单元格"""
@@ -68,7 +78,7 @@ class TestDataContract(unittest.TestCase):
     def test_column_order_preserved(self):
         """原始64列字段顺序应不变"""
         original_order = list(self.raw.columns)
-        clean_order = [c for c in self.df.columns if c in original_order]
+        clean_order = list(self.df.columns[:len(original_order)])
         self.assertEqual(clean_order, original_order)
 
     def test_time_format(self):
@@ -84,6 +94,17 @@ class TestDataContract(unittest.TestCase):
         """应有 _Minutes 衍生列"""
         self.assertIn("Wake_Up_Time_Minutes", self.df.columns)
         self.assertIn("Sleep_Time_Minutes", self.df.columns)
+
+    def test_time_minutes_values(self):
+        """分钟衍生列必须与规范化后的 HH:MM 文本逐行一致"""
+        for col in ["Wake_Up_Time", "Sleep_Time"]:
+            parts = self.df[col].str.split(":", expand=True).astype(int)
+            expected = parts[0] * 60 + parts[1]
+            actual = self.df[col + "_Minutes"].astype(int)
+            self.assertTrue(
+                expected.equals(actual),
+                f"{col}_Minutes does not match {col}"
+            )
 
 
 if __name__ == "__main__":

@@ -1,0 +1,3 @@
+﻿task_id,model,split,seed,n_samples,class_order,accuracy,macro_f1,balanced_accuracy,roc_auc,mae,rmse,recall_poor,recall_average,recall_good,recall_excellent,is_primary
+task2,Dummy Most Frequent,val,20260726,2000,Poor|Average|Good|Excellent,0.4455,0.15409892770667588,0.25,,0.6835,0.9703092290605093,,,,,False
+task2,Logistic Regression,val,20260726,2000,Poor|Average|Good|Excellent,0.8265,0.8201949781526471,0.8122772009725698,,0.1735,0.41653331199317056,,,,,True

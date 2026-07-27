@@ -1,0 +1,81 @@
+version: 1
+random_state: 20260726
+id_column: Person_ID
+
+tasks:
+  task1:
+    target_name: Early_Waker
+    source_column: Early_Waker
+    problem_type: binary_classification
+    class_order:
+      - "No"
+      - "Yes"
+    encoding:
+      "No": 0
+      "Yes": 1
+    primary_metric: accuracy
+    metrics:
+      - accuracy
+      - macro_f1
+      - balanced_accuracy
+      - roc_auc
+
+  task2:
+    target_name: Health_Score_Level
+    source_column: Health_Score
+    problem_type: ordinal_classification
+    class_order:
+      - Poor
+      - Average
+      - Good
+      - Excellent
+    encoding:
+      Poor: 0
+      Average: 1
+      Good: 2
+      Excellent: 3
+    bins:
+      edges:
+        - 0
+        - 60
+        - 70
+        - 85
+        - 100
+      right_closed: true
+      include_lowest: true
+      intervals:
+        Poor: "[0, 60]"
+        Average: "(60, 70]"
+        Good: "(70, 85]"
+        Excellent: "(85, 100]"
+    primary_metric: accuracy
+    metrics:
+      - accuracy
+      - macro_f1
+      - balanced_accuracy
+      - mae
+      - rmse
+
+  task3:
+    target_name: Wellness_Category
+    source_column: Wellness_Category
+    problem_type: multiclass_classification
+    class_order:
+      - Poor
+      - Average
+      - Good
+      - Excellent
+    encoding:
+      Poor: 0
+      Average: 1
+      Good: 2
+      Excellent: 3
+    primary_metric: accuracy
+    metrics:
+      - accuracy
+      - macro_f1
+      - balanced_accuracy
+      - recall_poor
+      - recall_average
+      - recall_good
+      - recall_excellent

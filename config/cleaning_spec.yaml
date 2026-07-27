@@ -39,7 +39,7 @@ rules:
 
 validation_checks:
   - "输出行数 == 10000"
-  - "输出列数 == 64 (或 66 含 _Minutes)"
+  - "输出列数 == 66（保留 64 个原始字段，并新增 Wake_Up_Time_Minutes、Sleep_Time_Minutes）"
   - "输出缺失单元格 == 0"
   - "Person_ID 无重复无缺失"
   - "Unknown 数量 == 3014"

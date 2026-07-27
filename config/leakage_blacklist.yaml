@@ -1,0 +1,42 @@
+version: 1
+
+tasks:
+  task1:
+    forbidden:
+      Person_ID: "唯一标识符，不得作为模型特征"
+      Early_Waker: "任务一目标字段"
+      Wake_Up_Time: "直接定义 Early_Waker 的时间字段"
+      Sleep_Time: "与起床时间和睡眠时长共同形成直接代理"
+      Wake_Up_Time_Minutes: "Wake_Up_Time 的数值化直接代理"
+      Sleep_Time_Minutes: "Sleep_Time 的数值化直接代理"
+      Sleep_Duration_Hours: "与 Wake/Sleep 时间共同形成标签代理"
+      Healthy_Aging_Score: "可疑综合评分，主模型排除，仅允许后续消融"
+
+  task2:
+    forbidden:
+      Person_ID: "唯一标识符，不得作为模型特征"
+      Health_Score: "任务二分档标签的直接来源"
+      Health_Score_Level: "任务二生成后的目标字段"
+      Health_Score_Category: "任务二目标的同义衍生字段"
+      Health_Score_Category_Encoded: "任务二目标的编码字段"
+      Wellness_Category: "与 Health Score 高度相关的跨任务综合标签"
+      Fitness_Level: "与综合健康等级高度相关的目标代理"
+      Healthy_Aging_Score: "可疑综合评分，主模型排除，仅允许后续消融"
+      Early_Waker: "跨任务目标字段，基线排除"
+      Wake_Up_Time: "基线排除的原始时间字段"
+      Sleep_Time: "基线排除的原始时间字段"
+      Wake_Up_Time_Minutes: "Wake_Up_Time 的数值化字段"
+      Sleep_Time_Minutes: "Sleep_Time 的数值化字段"
+
+  task3:
+    forbidden:
+      Person_ID: "唯一标识符，不得作为模型特征"
+      Wellness_Category: "任务三目标字段"
+      Health_Score: "可按阈值高度还原任务三目标"
+      Fitness_Level: "与 Wellness_Category 完全一致"
+      Healthy_Aging_Score: "可疑综合评分，主模型排除，仅允许后续消融"
+      Early_Waker: "跨任务目标字段，基线排除"
+      Wake_Up_Time: "基线排除的原始时间字段"
+      Sleep_Time: "基线排除的原始时间字段"
+      Wake_Up_Time_Minutes: "Wake_Up_Time 的数值化字段"
+      Sleep_Time_Minutes: "Sleep_Time 的数值化字段"
