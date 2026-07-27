@@ -8,7 +8,7 @@ import os, sys, pickle
 import numpy as np
 import pandas as pd
 from sklearn.ensemble import RandomForestClassifier
-from sklearn.model_selection import StratifiedKFold, cross_val_score, GridSearchCV
+from sklearn.model_selection import StratifiedKFold, cross_val_score
 from sklearn.metrics import accuracy_score, classification_report, confusion_matrix
 import xgboost as xgb
 import lightgbm as lgb
@@ -55,75 +55,69 @@ for i, label in enumerate(["Poor(0)", "Average(1)", "Good(2)", "Excellent(3)"]):
     cnt = (y_train == i).sum()
     print(f"    {label}: {cnt} ({cnt/len(y_train)*100:.1f}%)")
 
-# 3. Train baseline models with class_weight
-print("\n[3/5] Training baseline models (class_weight='balanced')...")
-models = {
-    "Random Forest": RandomForestClassifier(
-        n_estimators=200, max_depth=12, random_state=RANDOM_STATE,
-        class_weight="balanced", n_jobs=-1
-    ),
-    "XGBoost": xgb.XGBClassifier(
-        n_estimators=200, max_depth=6, learning_rate=0.1,
-        random_state=RANDOM_STATE, eval_metric="mlogloss", verbosity=0,
-        # scale_pos_weight doesn't work for multi-class; handled by sample weights
-    ),
-    "LightGBM": lgb.LGBMClassifier(
-        n_estimators=200, max_depth=6, learning_rate=0.1,
-        random_state=RANDOM_STATE, class_weight="balanced", verbose=-1
-    ),
-}
-
+# 3. Train baseline models with 5-fold CV
+print("\n[3/5] Training baseline models (5-fold CV)...")
 cv = StratifiedKFold(n_splits=N_FOLDS, shuffle=True, random_state=RANDOM_STATE)
 
-results = {}
-for name, model in models.items():
-    cv_scores = cross_val_score(model, X_train, y_train, cv=cv, scoring="accuracy", n_jobs=-1)
-    model.fit(X_train, y_train)
-    y_pred = model.predict(X_val)
-    acc = accuracy_score(y_val, y_pred)
-    results[name] = {"model": model, "cv_mean": cv_scores.mean(),
-                     "cv_std": cv_scores.std(), "val_acc": acc, "y_pred": y_pred}
-    print(f"  {name:15s}: CV={cv_scores.mean():.4f}+/-{cv_scores.std():.4f}, Val_Acc={acc:.4f}")
+models = {}
+for name, m in [
+    ("Random Forest", RandomForestClassifier(n_estimators=200, max_depth=12, random_state=RANDOM_STATE)),
+    ("XGBoost", xgb.XGBClassifier(n_estimators=200, max_depth=6, learning_rate=0.1,
+                                   random_state=RANDOM_STATE, eval_metric="mlogloss", verbosity=0)),
+    ("LightGBM", lgb.LGBMClassifier(n_estimators=200, max_depth=6, learning_rate=0.1,
+                                     random_state=RANDOM_STATE, verbose=-1)),
+]:
+    cv_s = cross_val_score(m, X_train, y_train, cv=cv, scoring="accuracy")
+    m.fit(X_train, y_train)
+    yp = m.predict(X_val)
+    acc = accuracy_score(y_val, yp)
+    models[name] = {"model": m, "cv_mean": float(cv_s.mean()), "cv_std": float(cv_s.std()), "val_acc": float(acc)}
+    print(f"  {name:15s}: CV={cv_s.mean():.4f}+/-{cv_s.std():.4f}, Val_Acc={acc:.4f}")
 
-# 4. Hyperparameter tuning for best model
-print("\n[4/5] Hyperparameter tuning...")
-best_name = max(results, key=lambda k: results[k]["val_acc"])
-print(f"  Best baseline: {best_name} (Val_Acc={results[best_name]['val_acc']:.4f})")
+# 4. Fast tuning (2 combos each, 3-fold CV)
+print("\n[4/5] Fast tuning (2-param search, 3-fold CV)...")
 
-if "XGBoost" in best_name:
-    param_grid = {
-        "n_estimators": [100, 200, 300],
-        "max_depth": [4, 6, 8],
-        "learning_rate": [0.05, 0.1],
-        "subsample": [0.8, 1.0],
-    }
-    base = xgb.XGBClassifier(random_state=RANDOM_STATE, eval_metric="mlogloss", verbosity=0)
-elif "LightGBM" in best_name:
-    param_grid = {
-        "n_estimators": [100, 200, 300],
-        "max_depth": [4, 6, 8],
-        "learning_rate": [0.05, 0.1],
-        "num_leaves": [31, 63],
-    }
-    base = lgb.LGBMClassifier(random_state=RANDOM_STATE, class_weight="balanced", verbose=-1)
-else:
-    param_grid = {
-        "n_estimators": [200, 300, 500],
-        "max_depth": [15, 20, None],
-        "min_samples_split": [2, 5],
-        "min_samples_leaf": [1, 2],
-    }
-    base = RandomForestClassifier(random_state=RANDOM_STATE, class_weight="balanced", n_jobs=-1)
+# XGBoost
+bx, bp = 0, None
+for p in [{"n_estimators":200, "max_depth":6, "learning_rate":0.1},
+          {"n_estimators":300, "max_depth":8, "learning_rate":0.05}]:
+    s = cross_val_score(xgb.XGBClassifier(**p, random_state=RANDOM_STATE, eval_metric="mlogloss", verbosity=0),
+                        X_train, y_train, cv=3, scoring="accuracy").mean()
+    if s > bx: bx, bp = s, p
+mx = xgb.XGBClassifier(**bp, random_state=RANDOM_STATE, eval_metric="mlogloss", verbosity=0).fit(X_train, y_train)
+yp_x = mx.predict(X_val)
 
-grid = GridSearchCV(base, param_grid, cv=3, scoring="accuracy", n_jobs=-1, verbose=0)
-grid.fit(X_train, y_train)
-print(f"  Best params: {grid.best_params_}")
-print(f"  Best CV score: {grid.best_score_:.4f}")
+# LightGBM
+bl, lp = 0, None
+for p in [{"n_estimators":200, "max_depth":6, "learning_rate":0.1, "num_leaves":31},
+          {"n_estimators":300, "max_depth":8, "learning_rate":0.05, "num_leaves":63}]:
+    s = cross_val_score(lgb.LGBMClassifier(**p, random_state=RANDOM_STATE, verbose=-1),
+                        X_train, y_train, cv=3, scoring="accuracy").mean()
+    if s > bl: bl, lp = s, p
+ml = lgb.LGBMClassifier(**lp, random_state=RANDOM_STATE, verbose=-1).fit(X_train, y_train)
+yp_l = ml.predict(X_val)
 
-best_model = grid.best_estimator_
-y_pred_tuned = best_model.predict(X_val)
-final_acc = accuracy_score(y_val, y_pred_tuned)
-print(f"  Final Val_Acc: {final_acc:.4f}")
+# Random Forest
+br, rp = 0, None
+for p in [{"n_estimators":300, "max_depth":15},
+          {"n_estimators":500, "max_depth":None}]:
+    s = cross_val_score(RandomForestClassifier(**p, random_state=RANDOM_STATE),
+                        X_train, y_train, cv=3, scoring="accuracy").mean()
+    if s > br: br, rp = s, p
+mr = RandomForestClassifier(**rp, random_state=RANDOM_STATE).fit(X_train, y_train)
+yp_r = mr.predict(X_val)
+
+print(f"  XGBoost:     {bp}  CV={bx:.4f}  Val_Acc={accuracy_score(y_val, yp_x):.4f}")
+print(f"  LightGBM:    {lp}  CV={bl:.4f}  Val_Acc={accuracy_score(y_val, yp_l):.4f}")
+print(f"  RandomForest:{rp}  CV={br:.4f}  Val_Acc={accuracy_score(y_val, yp_r):.4f}")
+
+# Pick best single model
+tuned = {"XGBoost": mx, "LightGBM": ml, "Random Forest": mr}
+best_name = max(tuned, key=lambda n: accuracy_score(y_val, tuned[n].predict(X_val)))
+best_model = tuned[best_name]
+y_pred_final = best_model.predict(X_val)
+final_acc = accuracy_score(y_val, y_pred_final)
+print(f"\n  Best tuned model: {best_name} (Val_Acc={final_acc:.4f})")
 
 # 5. Feature importance & save
 print("\n[5/5] Feature importance & saving...")
@@ -140,7 +134,7 @@ feat_imp.to_csv(os.path.join(TASK2_DIR, "feature_importance.csv"), index=False)
 # Predictions
 label_map = {0: "Poor", 1: "Average", 2: "Good", 3: "Excellent"}
 y_val_orig = pd.Series(y_val).map(label_map)
-y_pred_orig = pd.Series(y_pred_tuned).map(label_map)
+y_pred_orig = pd.Series(y_pred_final).map(label_map)
 
 results_df = pd.DataFrame({
     "Person_ID": ids_val.values,
@@ -150,26 +144,25 @@ results_df = pd.DataFrame({
 results_df.to_csv(os.path.join(TASK2_DIR, "predictions.csv"), index=False)
 
 # Confusion matrix
-cm = confusion_matrix(y_val, y_pred_tuned)
+cm = confusion_matrix(y_val, y_pred_final)
 print(f"\n  Confusion Matrix (rows=true, cols=pred):")
 print(f"         Poor  Avg   Good  Excel")
 for i, lbl in enumerate(["Poor", "Avg", "Good", "Excel"]):
     print(f"  {lbl:6s} {cm[i,0]:5d} {cm[i,1]:5d} {cm[i,2]:5d} {cm[i,3]:5d}")
 
 print(f"\n  Classification Report:")
-print(classification_report(y_val, y_pred_tuned, target_names=["Poor", "Average", "Good", "Excellent"]))
+print(classification_report(y_val, y_pred_final, target_names=["Poor", "Average", "Good", "Excellent"]))
 
 # Save model
 with open(os.path.join(TASK2_DIR, "best_model.pkl"), "wb") as f:
     pickle.dump(best_model, f)
 
-acc2 = final_acc
-metrics = {"ACC2": acc2, "best_model_name": best_name,
-           "best_params": grid.best_params_, "cv_best_score": grid.best_score_}
+metrics = {"ACC2": float(final_acc), "best_model_name": best_name,
+           "n_features": len(feat_cols), "removed_leaky_features": leaky_features}
 with open(os.path.join(TASK2_DIR, "metrics.pkl"), "wb") as f:
     pickle.dump(metrics, f)
 
 print(f"\n{'=' * 60}")
-print(f"Task 2 Completed! ACC2 = {acc2:.4f}")
-print(f"Score contribution (40%): {acc2 * 100 * 0.40:.2f}")
+print(f"Task 2 Completed! ACC2 = {final_acc:.4f}")
+print(f"Score contribution (40%): {final_acc * 100 * 0.40:.2f}")
 print(f"{'=' * 60}")

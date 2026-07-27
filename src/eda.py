@@ -11,7 +11,8 @@ import pandas as pd
 import numpy as np
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from config import DATA_PATH, OUTPUT_DIR
+from config import DATA_PATH, OUTPUT_DIR    #可以全借：import config，但之后你要写 config.DATA_PATH 才能用。
+                                            #用 from config import DATA_PATH 更省事，直接用 DATA_PATH 就行。这只是一种选择，习惯上需要啥借啥，代码更清晰。
 
 plt.rcParams["font.family"] = "DejaVu Sans"
 plt.rcParams["axes.unicode_minus"] = False
