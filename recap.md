@@ -60,7 +60,7 @@ EDA（Exploratory Data Analysis，探索性数据分析）脚本，用于在建�
 | 项目 | 说明 |
 |------|------|
 | **是什么** | 缺失值填充后、任何编码/标准化**之前**的清洗数据 |
-| **内容** | 完整的 10,000 行样本，每行一个人。相比原始 `datas.csv`（64列），多了 `Wake_Up_Time_Minutes` 和 `Sleep_Time_Minutes` 两列（66列）。Alcohol_Consumption 的 3014 个缺失值已替换为 "Unknown"，Exercise_Type/Workout_Intensity 的 824 个缺失值已替换为 "No Exercise"/"No Workout" |
+| **内容** | 完整的 10,000 行样本，每行一个人。相比原始 `A题数据集.csv`（64列），多了 `Wake_Up_Time_Minutes` 和 `Sleep_Time_Minutes` 两列（66列）。Alcohol_Consumption 的 3014 个缺失值已替换为 "Unknown"，Exercise_Type/Workout_Intensity 的 824 个缺失值已替换为 "No Exercise"/"No Workout" |
 | **为什么叫"semantic clean"** | 此时数据仍是**人类可读的原始文本**（如 Gender="Male"、Country="Italy"），没有被转成 0/1/2 的整数编码。方便队员审计清洗是否正确 |
 | **用途** | 团队内部检查清洗质量；也可以作为各任务的原始输入（但需各自完成编码） |
 
