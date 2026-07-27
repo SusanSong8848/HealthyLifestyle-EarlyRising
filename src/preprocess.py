@@ -1,12 +1,12 @@
 """
-Step 3: Data Preprocessing
-- Missing value imputation
-- Time feature conversion (Wake_Up_Time, Sleep_Time -> minutes)
-- Categorical encoding
-- Numeric scaling
-- Health_Score discretization for Task 2
-- Train/validation split
-- Export cleaned data as Data_clean.csv
+Step 3: Data Preprocessing (统一重构版 v3)
+基于 公共数据要求.txt 的公共清洗规范：
+- Exercise_Frequency_Per_Week=0 → Exercise_Type="No Exercise", Workout_Intensity="No Workout"
+- Alcohol_Consumption 缺失 → "Unknown"（不能填 No Alcohol）
+- 时间统一为 HH:MM（保留原始列 + 新增 _Minutes 列）
+- 保留全部 10,000 行、64 列和 Person_ID
+- 不编码、不标准化、不截断异常值、不删行
+- 输出 base_semantic_clean.csv + split_manifest.csv
 """
 import os
 import sys
@@ -14,102 +14,105 @@ import pickle
 import pandas as pd
 import numpy as np
 from sklearn.model_selection import train_test_split
-from sklearn.preprocessing import StandardScaler, LabelEncoder, OrdinalEncoder
-from sklearn.impute import SimpleImputer
+from sklearn.preprocessing import StandardScaler, LabelEncoder
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from config import (
-    DATA_PATH, OUTPUT_DIR, RANDOM_STATE, TEST_SIZE,
+    DATA_PATH, OUTPUT_DIR, PROCESSED_DIR, SPLITS_DIR,
+    RANDOM_STATE, TEST_SIZE, N_FOLDS,
     TARGET_TASK1, TARGET_TASK2, TARGET_TASK3,
-    NUMERIC_COLUMNS, CATEGORICAL_COLUMNS, TIME_COLUMNS,
-    HEALTH_SCORE_BINS, HEALTH_SCORE_LABELS, ID_COLUMN,
-    ALL_FEATURES
+    NUMERIC_COLUMNS, CATEGORICAL_COLUMNS, TIME_COLUMNS, ID_COLUMN,
+    HEALTH_SCORE_BINS, HEALTH_SCORE_LABELS,
+    STRUCTURAL_FILL, ALCOHOL_UNKNOWN, ALL_FEATURES,
 )
 
-OUTPUT_PREP = os.path.join(OUTPUT_DIR, "preprocess")
-os.makedirs(OUTPUT_PREP, exist_ok=True)
+os.makedirs(PROCESSED_DIR, exist_ok=True)
+os.makedirs(SPLITS_DIR, exist_ok=True)
 
-print("=" * 60)
-print("Step 3: Data Preprocessing")
-print("=" * 60)
+print("=" * 65)
+print("Step 3: Data Preprocessing (Unified Clean Rules v3)")
+print("=" * 65)
 
-# 1. Load raw data
-print("\n[1/9] Loading raw data...")
+# ============ 1. Load raw data ============
+print("\n[1/8] Loading raw data...")
 df = pd.read_csv(DATA_PATH)
 print(f"  Shape: {df.shape}")
 
-# 2. Time feature conversion: "HH:MM" -> total minutes since midnight
-print("\n[2/9] Converting time features (Wake_Up_Time, Sleep_Time) to minutes...")
+# ============ 2. Time normalization ============
+print("\n[2/8] Normalizing time format to HH:MM...")
 for col in TIME_COLUMNS:
     if col in df.columns:
+        # Normalize to zero-padded HH:MM
+        def _norm_time(val):
+            parts = str(val).strip().split(":")
+            h, m = int(parts[0]), int(parts[1])
+            return f"{h:02d}:{m:02d}"
+        df[col] = df[col].apply(_norm_time)
+        # Create minutes from midnight column
         parts = df[col].str.split(":", expand=True).astype(float)
         df[col + "_Minutes"] = parts[0] * 60 + parts[1]
-        print(f"  {col}: converted to {col}_Minutes (range: {df[col+'_Minutes'].min():.0f} - {df[col+'_Minutes'].max():.0f})")
+        print(f"  {col}: normalized, {col}_Minutes created (range: {df[col+'_Minutes'].min():.0f}-{df[col+'_Minutes'].max():.0f})")
 
-# 3. Handle missing values
-print("\n[3/9] Handling missing values...")
+# ============ 3. Missing value imputation (unified rules) ============
+print("\n[3/8] Handling missing values (unified rules)...")
 
-# 3a. Check Exercise_Type and Workout_Intensity: when Exercise_Frequency_Per_Week == 0,
-#     these should logically be "None"
-mask_no_exercise = (df["Exercise_Frequency_Per_Week"] == 0) | (df["Exercise_Type"].isna())
-df.loc[mask_no_exercise, "Exercise_Type"] = df.loc[mask_no_exercise, "Exercise_Type"].fillna("None")
-df.loc[mask_no_exercise, "Workout_Intensity"] = df.loc[mask_no_exercise, "Workout_Intensity"].fillna("None")
+# 3a. Structural fills: Exercise_Type, Workout_Intensity
+mask_no_exercise = df["Exercise_Frequency_Per_Week"] == 0
+ex_type_missing = df["Exercise_Type"].isna()
+ex_intensity_missing = df["Workout_Intensity"].isna()
 
-# Fill remaining NAs in Exercise_Type and Workout_Intensity with mode
-for col in ["Exercise_Type", "Workout_Intensity"]:
-    mode_val = df[col].mode()[0]
-    df[col] = df[col].fillna(mode_val)
-    print(f"  {col}: remaining NA filled with mode='{mode_val}'")
+# Safety check: all missing exercise fields correspond to zero frequency
+assert (ex_type_missing & ~mask_no_exercise).sum() == 0, \
+    "Exercise_Type has NaN but Exercise_Frequency_Per_Week != 0!"
+assert (ex_intensity_missing & ~mask_no_exercise).sum() == 0, \
+    "Workout_Intensity has NaN but Exercise_Frequency_Per_Week != 0!"
 
-# 3b. Alcohol_Consumption: ~30% missing. Create "Unknown" category to preserve information
-df["Alcohol_Consumption"] = df["Alcohol_Consumption"].fillna("Unknown")
-print(f"  Alcohol_Consumption: filled NA with 'Unknown'")
+df.loc[mask_no_exercise & ex_type_missing, "Exercise_Type"] = STRUCTURAL_FILL["Exercise_Type"]
+df.loc[mask_no_exercise & ex_intensity_missing, "Workout_Intensity"] = STRUCTURAL_FILL["Workout_Intensity"]
+print(f"  Exercise_Type: {ex_type_missing.sum()} NaN → '{STRUCTURAL_FILL['Exercise_Type']}'")
+print(f"  Workout_Intensity: {ex_intensity_missing.sum()} NaN → '{STRUCTURAL_FILL['Workout_Intensity']}'")
 
-# Verify no missing values remain
+# 3b. Alcohol_Consumption → "Unknown" (NOT "No Alcohol")
+alcohol_missing = df["Alcohol_Consumption"].isna()
+df.loc[alcohol_missing, "Alcohol_Consumption"] = ALCOHOL_UNKNOWN
+print(f"  Alcohol_Consumption: {alcohol_missing.sum()} NaN → '{ALCOHOL_UNKNOWN}'")
+
+# Verify no remaining missing values
 remaining_na = df.isnull().sum().sum()
-print(f"  Remaining missing values after imputation: {remaining_na}")
+print(f"  Remaining NaN cells: {remaining_na}")
+assert remaining_na == 0, f"Still have {remaining_na} missing values!"
 
-# 4. Export full cleaned dataset BEFORE encoding (human-readable)
-print("\n[4/9] Exporting cleaned dataset (Data_clean.csv)...")
-clean_df = df.copy()
+# ============ 4. Export base_semantic_clean.csv ============
+print("\n[4/8] Exporting base_semantic_clean.csv (human-readable, BEFORE encoding)...")
+clean_path = os.path.join(PROCESSED_DIR, "base_semantic_clean.csv")
+df.to_csv(clean_path, index=False, encoding="utf-8-sig")
+print(f"  Saved: {clean_path} ({len(df)} rows × {len(df.columns)} cols)")
 
-# Add derived time columns
-for col in TIME_COLUMNS:
-    if col + "_Minutes" in df.columns:
-        clean_df[col + "_Minutes"] = df[col + "_Minutes"]
+# ============ 5. Encode categorical features ============
+print("\n[5/8] Encoding categorical features...")
 
-clean_path = os.path.join(OUTPUT_PREP, "Data_clean.csv")
-clean_df.to_csv(clean_path, index=False)
-print(f"  Data_clean.csv saved: {clean_path}")
-print(f"  Rows: {len(clean_df)}, Columns: {len(clean_df.columns)}")
-
-# 5. Encode categorical features
-print("\n[5/9] Encoding categorical features...")
-
-cat_cols_in_df = [c for c in CATEGORICAL_COLUMNS if c in df.columns
-                  and c not in [TARGET_TASK1, TARGET_TASK2, TARGET_TASK3, "Wellness_Category"]]
-for c in ["Alcohol_Consumption", "Exercise_Type", "Workout_Intensity"]:
-    if c not in cat_cols_in_df and c in df.columns:
-        cat_cols_in_df.append(c)
+# Build categorical columns to encode (exclude targets and ID)
+cat_cols_to_encode = [c for c in CATEGORICAL_COLUMNS
+                      if c in df.columns
+                      and c not in [TARGET_TASK1, TARGET_TASK2, TARGET_TASK3, ID_COLUMN]]
 
 encoders = {}
 df_encoded = df.copy()
 
-for col in cat_cols_in_df:
+for col in cat_cols_to_encode:
     le = LabelEncoder()
     df_encoded[col + "_Encoded"] = le.fit_transform(df_encoded[col].astype(str))
     encoders[col] = le
-    n_unique = len(le.classes_)
-    print(f"  {col}: {n_unique} categories -> encoded as 0..{n_unique-1}")
+    print(f"  {col}: {len(le.classes_)} categories → 0..{len(le.classes_)-1}")
 
-print(f"  Total categorical features encoded: {len(cat_cols_in_df)}")
+# ============ 6. Encode target variables ============
+print("\n[6/8] Encoding target variables...")
 
-# 6. Encode target variables
-print("\n[6/9] Encoding target variables...")
-# Task 1: Early_Waker (Yes/No -> 1/0)
+# Task 1: Early_Waker → binary
 df_encoded["Early_Waker_Encoded"] = df_encoded[TARGET_TASK1].map({"Yes": 1, "No": 0})
+print(f"  Task1 Early_Waker: Yes={sum(df_encoded['Early_Waker_Encoded']==1)}, No={sum(df_encoded['Early_Waker_Encoded']==0)}")
 
-# Task 2: Health_Score -> binned categories
+# Task 2: Health_Score → 4-class bins
 df_encoded["Health_Score_Category"] = pd.cut(
     df_encoded[TARGET_TASK2],
     bins=HEALTH_SCORE_BINS,
@@ -118,37 +121,39 @@ df_encoded["Health_Score_Category"] = pd.cut(
 )
 he_le = LabelEncoder()
 df_encoded["Health_Score_Category_Encoded"] = he_le.fit_transform(df_encoded["Health_Score_Category"])
-print(f"  Health_Score bins: {HEALTH_SCORE_BINS}")
-print(f"  Health_Score labels: {HEALTH_SCORE_LABELS}")
-print(f"  Health_Score category distribution:")
-print(df_encoded["Health_Score_Category"].value_counts().to_string())
+encoders["Health_Score_LabelEncoder"] = he_le
+print(f"  Task2 Health_Score bins: {HEALTH_SCORE_BINS}")
+print(f"  Category distribution:")
+print(df_encoded["Health_Score_Category"].value_counts().sort_index().to_string())
 
-# Task 3: Wellness_Category
+# Task 3: Wellness_Category → 4-class (data has Poor, Average, Good, Excellent)
 wc_le = LabelEncoder()
 df_encoded["Wellness_Category_Encoded"] = wc_le.fit_transform(df_encoded[TARGET_TASK3])
-print(f"\n  Wellness_Category mapping: {dict(zip(wc_le.classes_, wc_le.transform(wc_le.classes_)))}")
-
-encoders["Health_Score_LabelEncoder"] = he_le
 encoders["Wellness_Category_LabelEncoder"] = wc_le
-with open(os.path.join(OUTPUT_PREP, "encoders.pkl"), "wb") as f:
+print(f"  Task3 Wellness_Category mapping: {dict(zip(wc_le.classes_, range(len(wc_le.classes_))))}")
+print(f"  Category distribution:")
+print(df_encoded[TARGET_TASK3].value_counts().to_string())
+
+# Save encoders
+with open(os.path.join(PROCESSED_DIR, "encoders.pkl"), "wb") as f:
     pickle.dump(encoders, f)
+print(f"  Encoders saved to {PROCESSED_DIR}/encoders.pkl")
 
-# 7. Build feature matrix
-print("\n[7/9] Building feature matrix...")
+# ============ 7. Build feature matrix & split ============
+print("\n[7/8] Building feature matrix & joint-stratified split...")
 
+# Build numeric feature list
 num_cols = [c for c in NUMERIC_COLUMNS if c in df_encoded.columns
-            and c not in [TARGET_TASK1, TARGET_TASK2, TARGET_TASK3,
-                          "Wellness_Category", ID_COLUMN]]
+            and c not in [TARGET_TASK1, TARGET_TASK2, TARGET_TASK3, ID_COLUMN]]
 time_min_cols = [c + "_Minutes" for c in TIME_COLUMNS if c + "_Minutes" in df_encoded.columns]
 num_cols = [c for c in num_cols if c not in TIME_COLUMNS] + time_min_cols
 
-enc_cat_cols = [c + "_Encoded" for c in cat_cols_in_df if c + "_Encoded" in df_encoded.columns]
+# Build encoded categorical feature list
+enc_cat_cols = [c + "_Encoded" for c in cat_cols_to_encode if c + "_Encoded" in df_encoded.columns]
 
-feat_cols = num_cols + enc_cat_cols
+# Combine all feature columns
+feat_cols = list(dict.fromkeys(num_cols + enc_cat_cols))  # dedup while preserving order
 feat_cols = [c for c in feat_cols if c in df_encoded.columns]
-feat_cols = list(dict.fromkeys(feat_cols))
-
-print(f"  Total feature columns: {len(feat_cols)}")
 
 X = df_encoded[feat_cols].copy()
 y1 = df_encoded["Early_Waker_Encoded"]
@@ -156,44 +161,43 @@ y2 = df_encoded["Health_Score_Category_Encoded"]
 y3 = df_encoded["Wellness_Category_Encoded"]
 person_ids = df_encoded[ID_COLUMN]
 
-# 8. Train/validation split
-print("\n[8/9] Splitting data (80% train, 20% validation)...")
+print(f"  Total feature columns: {len(feat_cols)}")
+
+# Joint stratification key: combine task1 + task2 + task3 labels
+stratify_key = (
+    df_encoded[TARGET_TASK1].astype(str) + "_" +
+    df_encoded["Health_Score_Category"].astype(str) + "_" +
+    df_encoded[TARGET_TASK3].astype(str)
+)
+print(f"  Unique stratification groups: {stratify_key.nunique()}")
+
 X_train, X_val, y1_train, y1_val, y2_train, y2_val, y3_train, y3_val, ids_train, ids_val = train_test_split(
     X, y1, y2, y3, person_ids,
     test_size=TEST_SIZE,
     random_state=RANDOM_STATE,
-    stratify=y3
+    stratify=stratify_key
 )
 
-print(f"  Train set: {X_train.shape[0]} samples")
-print(f"  Validation set: {X_val.shape[0]} samples")
-print(f"  y1 (Early_Waker) train: {y1_train.value_counts().to_dict()}")
-print(f"  y1 (Early_Waker) val:   {y1_val.value_counts().to_dict()}")
-print(f"  y2 (Health_Score) train: {y2_train.value_counts().to_dict()}")
-print(f"  y2 (Health_Score) val:   {y2_val.value_counts().to_dict()}")
-print(f"  y3 (Wellness) train: {y3_train.value_counts().to_dict()}")
-print(f"  y3 (Wellness) val:   {y3_val.value_counts().to_dict()}")
+print(f"  Train: {X_train.shape[0]} samples, Val: {X_val.shape[0]} samples")
+print(f"  y1_train: No={sum(y1_train==0)}, Yes={sum(y1_train==1)}")
+print(f"  y1_val:   No={sum(y1_val==0)}, Yes={sum(y1_val==1)}")
 
-# 9. Scale numeric features
-print("\n[9/9] Scaling numeric features...")
-scaler = StandardScaler()
+# ============ 8. Scale numeric features & save ============
+print("\n[8/8] Scaling numeric features & saving...")
 
 actual_num_cols = [c for c in num_cols if c in feat_cols]
-X_train_num = X_train[actual_num_cols]
-X_val_num = X_val[actual_num_cols]
-
-scaler.fit(X_train_num)
+scaler = StandardScaler()
+scaler.fit(X_train[actual_num_cols])
 
 X_train_scaled = X_train.copy()
 X_val_scaled = X_val.copy()
-X_train_scaled[actual_num_cols] = scaler.transform(X_train_num)
-X_val_scaled[actual_num_cols] = scaler.transform(X_val_num)
+X_train_scaled[actual_num_cols] = scaler.transform(X_train[actual_num_cols])
+X_val_scaled[actual_num_cols] = scaler.transform(X_val[actual_num_cols])
 
-with open(os.path.join(OUTPUT_PREP, "scaler.pkl"), "wb") as f:
+with open(os.path.join(PROCESSED_DIR, "scaler.pkl"), "wb") as f:
     pickle.dump(scaler, f)
 
 # Save processed data
-print("\n  Saving processed datasets...")
 processed = {
     "X_train": X_train_scaled,
     "X_val": X_val_scaled,
@@ -209,30 +213,52 @@ processed = {
     "actual_num_cols": actual_num_cols,
     "enc_cat_cols": enc_cat_cols,
 }
-
-with open(os.path.join(OUTPUT_PREP, "processed_data.pkl"), "wb") as f:
+with open(os.path.join(PROCESSED_DIR, "processed_data.pkl"), "wb") as f:
     pickle.dump(processed, f)
 
-# Save train/val CSVs for inspection
-df_train = pd.DataFrame(X_train_scaled, columns=feat_cols)
-df_train[ID_COLUMN] = ids_train.values
-df_train["Early_Waker"] = y1_train.values
-df_train["Health_Score_Category"] = y2_train.values
-df_train["Wellness_Category"] = y3_train.values
-df_train.to_csv(os.path.join(OUTPUT_PREP, "train_processed.csv"), index=False)
+# ============ Save split_manifest.csv ============
+print("\n  Generating split_manifest.csv...")
 
-df_val = pd.DataFrame(X_val_scaled, columns=feat_cols)
-df_val[ID_COLUMN] = ids_val.values
-df_val["Early_Waker"] = y1_val.values
-df_val["Health_Score_Category"] = y2_val.values
-df_val["Wellness_Category"] = y3_val.values
-df_val.to_csv(os.path.join(OUTPUT_PREP, "val_processed.csv"), index=False)
+manifest_rows = []
 
-print(f"\n  Feature count: {len(feat_cols)}")
-print(f"  Numeric features (scaled): {len(actual_num_cols)}")
-print(f"  Encoded categorical features: {len(enc_cat_cols)}")
-print(f"\n  All outputs saved to: {OUTPUT_PREP}")
+# Train split entries
+for i in range(len(ids_train)):
+    pid = ids_train.iloc[i] if hasattr(ids_train, 'iloc') else ids_train[i]
+    y2_label = he_le.inverse_transform([int(y2_train.iloc[i] if hasattr(y2_train, 'iloc') else y2_train[i])])[0]
+    y3_label = wc_le.inverse_transform([int(y3_train.iloc[i] if hasattr(y3_train, 'iloc') else y3_train[i])])[0]
+    manifest_rows.append({
+        "Person_ID": pid,
+        "split": "train",
+        "task1_label": "Yes" if (y1_train.iloc[i] if hasattr(y1_train, 'iloc') else y1_train[i]) == 1 else "No",
+        "task2_label": y2_label,
+        "task3_label": y3_label,
+    })
 
-print("\n" + "=" * 60)
-print("Step 3 completed! Preprocessed data ready for modeling.")
-print("=" * 60)
+# Val split entries
+for i in range(len(ids_val)):
+    pid = ids_val.iloc[i] if hasattr(ids_val, 'iloc') else ids_val[i]
+    y2_label = he_le.inverse_transform([int(y2_val.iloc[i] if hasattr(y2_val, 'iloc') else y2_val[i])])[0]
+    y3_label = wc_le.inverse_transform([int(y3_val.iloc[i] if hasattr(y3_val, 'iloc') else y3_val[i])])[0]
+    manifest_rows.append({
+        "Person_ID": pid,
+        "split": "val",
+        "task1_label": "Yes" if (y1_val.iloc[i] if hasattr(y1_val, 'iloc') else y1_val[i]) == 1 else "No",
+        "task2_label": y2_label,
+        "task3_label": y3_label,
+    })
+
+manifest_df = pd.DataFrame(manifest_rows)
+manifest_path = os.path.join(SPLITS_DIR, "split_manifest.csv")
+manifest_df.to_csv(manifest_path, index=False)
+print(f"  split_manifest.csv saved: {manifest_path}")
+print(f"    train: {len(manifest_df[manifest_df['split']=='train'])}")
+print(f"    val:   {len(manifest_df[manifest_df['split']=='val'])}")
+
+# ============ Summary ============
+print(f"\n{'=' * 65}")
+print(f"Preprocessing completed!")
+print(f"  base_semantic_clean.csv: data/processed/base_semantic_clean.csv")
+print(f"  split_manifest.csv:      data/splits/split_manifest.csv")
+print(f"  processed_data.pkl:       data/processed/processed_data.pkl")
+print(f"  Features: {len(feat_cols)} (numeric: {len(actual_num_cols)}, categorical: {len(enc_cat_cols)})")
+print(f"{'=' * 65}")

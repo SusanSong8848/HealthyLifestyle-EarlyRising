@@ -1,11 +1,12 @@
 """
-Task 2 - Health Score Classification (统一重构版 v3 FIXED)
+Task 3 - Wellness Category Prediction (统一重构版 v3 FIXED)
 严格遵循 公共数据要求.txt：
-- Health_Score 离散化边界：<60 Poor, 60-70 Average, 70-85 Good, >=85 Excellent
-- 移除泄漏特征：Health_Score（标签来源）、Wellness_Category、Fitness_Level（等级信息）
-- 可疑特征：Healthy_Aging_Score 主模型排除（消融实验可加入）
+- 目标：Wellness_Category 四分类（Excellent / Good / Average / Poor）
+  - 题面写三分类，但实际数据有 114 条 Poor，按实际数据做四分类
+- 移除泄漏特征：Wellness_Category（目标）、Health_Score（按45/65/80分界可100%还原）、Fitness_Level（与目标100%相同）
+- 可疑特征：Healthy_Aging_Score 主模型排除
 - random_state=20260726
-- 评估指标：Accuracy (ACC2)
+- 评估指标：Accuracy (ACC3)
 """
 import os, sys, pickle, warnings
 import numpy as np
@@ -15,7 +16,7 @@ warnings.filterwarnings("ignore")
 
 from sklearn.ensemble import RandomForestClassifier, VotingClassifier
 from sklearn.linear_model import LogisticRegression
-from sklearn.model_selection import StratifiedKFold, cross_val_score
+from sklearn.model_selection import StratifiedKFold, cross_val_score, train_test_split
 from sklearn.metrics import accuracy_score, classification_report, confusion_matrix
 from sklearn.preprocessing import StandardScaler, LabelEncoder
 import xgboost as xgb
@@ -23,18 +24,17 @@ import lightgbm as lgb
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from config import (
-    DATA_PATH, OUTPUT_DIR, TASK2_DIR, PROCESSED_DIR,
-    RANDOM_STATE, N_FOLDS, TASK2_LEAKY_FEATURES,
-    HEALTH_SCORE_BINS, HEALTH_SCORE_LABELS, ID_COLUMN,
+    DATA_PATH, TASK3_DIR,
+    RANDOM_STATE, N_FOLDS, TASK3_LEAKY_FEATURES, ID_COLUMN,
 )
 
 print("=" * 65)
-print("Task 2: Health Score Classification (v3 FIXED)")
-print(f"Bins: {HEALTH_SCORE_BINS}")
-print(f"Labels: {HEALTH_SCORE_LABELS}")
+print("Task 3: Wellness Category Prediction (v3 FIXED)")
+print(f"Target: Wellness_Category (4-class: Excellent/Good/Average/Poor)")
 print(f"random_state={RANDOM_STATE}")
-print(f"Leaky excluded: {TASK2_LEAKY_FEATURES}")
+print(f"Leaky excluded: {TASK3_LEAKY_FEATURES}")
 print("Also excluded: Healthy_Aging_Score (suspicious composite)")
+print("NOTE: Data contains 114 'Poor' samples — model is 4-class, not 3-class")
 print("=" * 65)
 
 # ==================== 1. Load & clean data ====================
@@ -59,28 +59,26 @@ raw.loc[mask_no_ex & raw["Workout_Intensity"].isna(), "Workout_Intensity"] = "No
 raw["Alcohol_Consumption"] = raw["Alcohol_Consumption"].fillna("Unknown")
 assert raw.isnull().sum().sum() == 0, "Missing values remain!"
 
-# ==================== 2. Create target & excluded list ====================
-print("\n[2/6] Creating target variable (Health_Score_Level)...")
+# ==================== 2. Target variable ====================
+print("\n[2/6] Target variable: Wellness_Category...")
 
-raw["Health_Score_Level"] = pd.cut(
-    raw["Health_Score"],
-    bins=HEALTH_SCORE_BINS,
-    labels=HEALTH_SCORE_LABELS,
-    include_lowest=True
-)
-print(f"  Health_Score_Level distribution:")
-print(raw["Health_Score_Level"].value_counts().sort_index().to_string())
+# Verify: data has 4 classes, not just 3
+wc_dist = raw["Wellness_Category"].value_counts()
+print(f"  Wellness_Category distribution:")
+print(wc_dist.to_string())
 
 # Encode target
-y_le = LabelEncoder()
-y_all = y_le.fit_transform(raw["Health_Score_Level"])
-print(f"  Encoding: {dict(zip(y_le.classes_, range(len(y_le.classes_))))}")
+wc_le = LabelEncoder()
+y_all = wc_le.fit_transform(raw["Wellness_Category"])
+print(f"  Encoding: {dict(zip(wc_le.classes_, range(len(wc_le.classes_))))}")
 
-# Excluded features
-EXCLUDED_COLUMNS = list(TASK2_LEAKY_FEATURES) + ["Healthy_Aging_Score",
-    "Early_Waker", "Wake_Up_Time", "Sleep_Time",
+# Defined excluded features
+EXCLUDED_COLUMNS = list(TASK3_LEAKY_FEATURES) + [
+    "Healthy_Aging_Score",
+    "Early_Waker",
+    "Wake_Up_Time", "Sleep_Time",
     "Wake_Up_Time_Minutes", "Sleep_Time_Minutes",
-    "Health_Score_Level"]
+]
 
 # ==================== 3. Feature engineering ====================
 print("\n[3/6] Feature engineering...")
@@ -123,7 +121,6 @@ print(f"  Total features: {len(available_num) + len(available_cat)}")
 # ==================== 4. Split ====================
 print("\n[4/6] Stratified split (80/20, stratify=y)...")
 
-from sklearn.model_selection import train_test_split
 idx = np.arange(len(raw))
 train_idx, test_idx = train_test_split(
     idx, test_size=0.2, random_state=RANDOM_STATE, stratify=y_all
@@ -150,11 +147,11 @@ X_train = scaler.fit_transform(X_train_raw)
 X_test = scaler.transform(X_test_raw)
 
 print(f"  Train: {X_train.shape[0]}, Test: {X_test.shape[0]}")
-for i, label in enumerate(y_le.classes_):
+for i, label in enumerate(wc_le.classes_):
     print(f"    {label}: train={sum(y_train==i)}, test={sum(y_test==i)}")
 
-# ==================== 5. Cross-validation + Tuning ====================
-print("\n[5/6] 5-Fold CV + model selection...")
+# ==================== 5. Cross-validation ====================
+print("\n[5/6] 5-Fold CV...")
 
 cv = StratifiedKFold(n_splits=N_FOLDS, shuffle=True, random_state=RANDOM_STATE)
 
@@ -182,7 +179,6 @@ for name, model in make_models().items():
     model.fit(X_train, y_train)
     final_models[name] = model
 
-# Voting Ensemble
 ensemble = VotingClassifier(
     estimators=[
         ("lr", final_models["Logistic Regression"]),
@@ -198,30 +194,30 @@ all_test_results = {}
 for name, model in {**final_models, "Voting Ensemble": ensemble}.items():
     y_pred = model.predict(X_test)
     all_test_results[name] = {
-        "ACC2": accuracy_score(y_test, y_pred),
+        "ACC3": accuracy_score(y_test, y_pred),
     }
 
-print(f"\n  {'Model':<25s} {'ACC2':>8s}")
+print(f"\n  {'Model':<25s} {'ACC3':>8s}")
 print(f"  {'-'*25} {'-'*8}")
 for name, r in all_test_results.items():
     marker = " ★" if name == "Voting Ensemble" else ""
-    print(f"  {name:<25s} {r['ACC2']:8.4f}{marker}")
+    print(f"  {name:<25s} {r['ACC3']:8.4f}{marker}")
 
 best_model = ensemble
 y_pred_final = best_model.predict(X_test)
-final_acc = all_test_results["Voting Ensemble"]["ACC2"]
+final_acc = all_test_results["Voting Ensemble"]["ACC3"]
 
 # ==================== Save outputs ====================
 print("\n" + "=" * 65)
 print("Saving outputs...")
 
 # Predictions CSV
-label_map = {i: lbl for i, lbl in enumerate(y_le.classes_)}
+label_map = {i: lbl for i, lbl in enumerate(wc_le.classes_)}
 pd.DataFrame({
     "Person_ID": person_ids_test,
     "True_Label": pd.Series(y_test).map(label_map).values,
     "Predicted_Label": pd.Series(y_pred_final).map(label_map).values,
-}).to_csv(os.path.join(TASK2_DIR, "predictions.csv"), index=False)
+}).to_csv(os.path.join(TASK3_DIR, "predictions.csv"), index=False)
 
 # Feature importance
 imp_models = ["Random Forest", "XGBoost", "LightGBM"]
@@ -234,7 +230,7 @@ feat_imp = pd.DataFrame({
     "Feature": feat_cols,
     "Importance": avg_imps / avg_imps.sum()
 }).sort_values("Importance", ascending=False)
-feat_imp.to_csv(os.path.join(TASK2_DIR, "feature_importance.csv"), index=False)
+feat_imp.to_csv(os.path.join(TASK3_DIR, "feature_importance.csv"), index=False)
 
 print("\n  Top 15 Features:")
 for i in range(min(15, len(feat_imp))):
@@ -243,33 +239,34 @@ for i in range(min(15, len(feat_imp))):
 
 cm = confusion_matrix(y_test, y_pred_final)
 print(f"\n  Confusion Matrix (rows=true, cols=pred):")
-print(f"         {label_map[0]:>8s} {label_map[1]:>8s} {label_map[2]:>8s} {label_map[3]:>8s}")
-for i, lbl in label_map.items():
-    print(f"  {lbl:6s} {cm[i,0]:8d} {cm[i,1]:8d} {cm[i,2]:8d} {cm[i,3]:8d}")
+lbls = list(label_map.values())
+print(f"         {'':>8s} " + " ".join(f"{l:>8s}" for l in lbls))
+for i, lbl in enumerate(lbls):
+    print(f"  {lbl:8s} " + " ".join(f"{cm[i,j]:8d}" for j in range(len(lbls))))
 
 print(f"\n  Classification Report:")
-print(classification_report(y_test, y_pred_final, target_names=list(label_map.values())))
+print(classification_report(y_test, y_pred_final, target_names=lbls))
 
-pickle.dump(best_model, open(os.path.join(TASK2_DIR, "best_model.pkl"), "wb"))
+pickle.dump(best_model, open(os.path.join(TASK3_DIR, "best_model.pkl"), "wb"))
 
 metrics = {
-    "ACC2": float(final_acc),
+    "ACC3": float(final_acc),
     "random_state": RANDOM_STATE,
-    "bins": HEALTH_SCORE_BINS,
-    "labels": HEALTH_SCORE_LABELS,
+    "n_classes": len(wc_le.classes_),
+    "classes": list(wc_le.classes_),
+    "note": "4-class classification (includes 114 Poor samples despite problem saying 3-class)",
     "best_model": "Voting Ensemble (LR+RF+XGB+LGB)",
     "features_used": len(feat_cols),
     "excluded": EXCLUDED_COLUMNS,
     "cv_results": cv_baseline,
     "test_results": {name: {k: float(v) for k, v in r.items()} for name, r in all_test_results.items()},
 }
-pickle.dump(metrics, open(os.path.join(TASK2_DIR, "metrics.pkl"), "wb"))
+pickle.dump(metrics, open(os.path.join(TASK3_DIR, "metrics.pkl"), "wb"))
 
-with open(os.path.join(TASK2_DIR, "metrics.txt"), "w", encoding="utf-8") as f:
-    f.write(f"ACC2 = {final_acc:.6f}\n")
+with open(os.path.join(TASK3_DIR, "metrics.txt"), "w", encoding="utf-8") as f:
+    f.write(f"ACC3 = {final_acc:.6f}\n")
     f.write(f"Random_State = {RANDOM_STATE}\n")
-    f.write(f"Bins = {HEALTH_SCORE_BINS}\n")
-    f.write(f"Labels = {HEALTH_SCORE_LABELS}\n")
+    f.write(f"Classes = {list(wc_le.classes_)} (4-class, includes Poor)\n")
     f.write(f"Best Model = Voting Ensemble (LR+RF+XGB+LGB)\n")
     f.write(f"Features = {len(feat_cols)}\n")
     f.write(f"Excluded = {EXCLUDED_COLUMNS}\n\n")
@@ -278,15 +275,20 @@ with open(os.path.join(TASK2_DIR, "metrics.txt"), "w", encoding="utf-8") as f:
         f.write(f"  {name}: CV={r['mean']:.4f}±{r['std']:.4f}\n")
     f.write("\n--- Test Set Results ---\n")
     for name, r in all_test_results.items():
-        f.write(f"  {name}: ACC={r['ACC2']:.4f}\n")
+        f.write(f"  {name}: ACC={r['ACC3']:.4f}\n")
     f.write("\n--- Top 15 Features ---\n")
     for i in range(min(15, len(feat_imp))):
         row = feat_imp.iloc[i]
         f.write(f"  {i+1:2d}. {row['Feature']:<35s} {row['Importance']:.6f}\n")
+    f.write("\n--- Note ---\n")
+    f.write("Data contains 114 'Poor' Wellness_Category samples. Despite the problem\n")
+    f.write("description mentioning only Excellent/Good/Average, this model treats it as\n")
+    f.write("a 4-class problem as recommended in 公共数据要求.txt.\n")
 
 print(f"\n{'=' * 65}")
-print(f"TASK 2 FINAL RESULT (v3 FIXED)")
-print(f"  ACC2              = {final_acc:.6f}")
+print(f"TASK 3 FINAL RESULT (v3 FIXED)")
+print(f"  ACC3              = {final_acc:.6f}")
+print(f"  Classes           = {list(wc_le.classes_)} (4-class)")
 print(f"  Best Model        = Voting Ensemble (LR+RF+XGB+LGB)")
 print(f"  Score (40%)       = {final_acc * 100 * 0.40:.2f} / 40.00")
 print(f"{'=' * 65}")

@@ -1,30 +1,86 @@
 """
-HealthyLifestyle_EarlyRising 项目配置文件
+HealthyLifestyle_EarlyRising 项目配置文件（统一重构版 v3）
+基于 公共数据要求.txt 统一所有参数的"地基"配置。
 """
 import os
 
-ROOT_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))      # Project root directory name(abspath): eg.D:\ECNU\MathematicalModeling\HealthyLifestyle_EarlyRising 
-DATA_PATH = os.path.join(ROOT_DIR, "datas.csv")     # os.path.join : ROOT_DIR + "datas.csv", eg. D:\ECNU\MathematicalModeling\HealthyLifestyle_EarlyRising\src
+# ============ 路径配置 ============
+ROOT_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+DATA_PATH = os.path.join(ROOT_DIR, "datas.csv")
 OUTPUT_DIR = os.path.join(ROOT_DIR, "outputs")
+DATA_DIR = os.path.join(ROOT_DIR, "data")
+PROCESSED_DIR = os.path.join(DATA_DIR, "processed")
+SPLITS_DIR = os.path.join(DATA_DIR, "splits")
 
 TASK1_DIR = os.path.join(OUTPUT_DIR, "task1")
 TASK2_DIR = os.path.join(OUTPUT_DIR, "task2")
 TASK3_DIR = os.path.join(OUTPUT_DIR, "task3")
+EDA_DIR = os.path.join(OUTPUT_DIR, "eda")
 
-for d in [TASK1_DIR, TASK2_DIR, TASK3_DIR]:
-    os.makedirs(d, exist_ok=True)       #"exist_ok=True" indicates that no error will be raised if the file already exists.
+for d in [TASK1_DIR, TASK2_DIR, TASK3_DIR, EDA_DIR, PROCESSED_DIR, SPLITS_DIR]:
+    os.makedirs(d, exist_ok=True)
 
-RANDOM_STATE = 42
+# ============ 随机种子 & 切分配置 ============
+RANDOM_STATE = 20260726  # 团队统一随机种子
 TEST_SIZE = 0.2
 N_FOLDS = 5
 
+# ============ 目标变量 ============
 TARGET_TASK1 = "Early_Waker"
 TARGET_TASK2 = "Health_Score"
 TARGET_TASK3 = "Wellness_Category"
+ID_COLUMN = "Person_ID"
 
-HEALTH_SCORE_BINS = [0, 50, 65, 80, 100]
+# ============ Task 2: Health_Score 离散化边界 ============
+# 团队确认：<60 Poor, 60-70 Average, 70-85 Good, >=85 Excellent
+HEALTH_SCORE_BINS = [0, 60, 70, 85, 100]
 HEALTH_SCORE_LABELS = ["Poor", "Average", "Good", "Excellent"]
 
+# ============ 时间列 ============
+TIME_COLUMNS = ["Wake_Up_Time", "Sleep_Time"]
+
+# ============ 统一清洗规则 ============
+# Exercise_Frequency_Per_Week=0 → Exercise_Type="No Exercise", Workout_Intensity="No Workout"
+# Alcohol_Consumption 缺失 → "Unknown"
+STRUCTURAL_FILL = {
+    "Exercise_Type": "No Exercise",
+    "Workout_Intensity": "No Workout",
+}
+ALCOHOL_UNKNOWN = "Unknown"
+
+# ============ 各任务泄漏字段（主模型禁止作为特征）============
+# Task 1: 时钟相关字段直接/间接定义标签
+TASK1_LEAKY_FEATURES = [
+    "Person_ID",
+    "Early_Waker",
+    "Wake_Up_Time",
+    "Sleep_Time",
+    "Wake_Up_Time_Minutes",
+    "Sleep_Time_Minutes",
+    "Sleep_Duration_Hours",
+]
+
+# Task 2: Health_Score是标签来源；Fitness_Level/Wellness_Category包含由健康评分形成的等级信息
+TASK2_LEAKY_FEATURES = [
+    "Person_ID",
+    "Health_Score",
+    "Wellness_Category",
+    "Fitness_Level",
+]
+
+# Task 3: Wellness_Category是目标；Fitness_Level与目标100%相同；
+#         Health_Score按45/65/80分界可100%还原目标
+TASK3_LEAKY_FEATURES = [
+    "Person_ID",
+    "Wellness_Category",
+    "Health_Score",
+    "Fitness_Level",
+]
+
+# Healthy_Aging_Score 属于可疑综合评分，建议主模型先排除，消融实验时再加入
+HEALTHY_AGING_SUSPICIOUS = True  # 设为 False 可保留
+
+# ============ 特征分类 ============
 DEMOGRAPHIC_FEATURES = [
     "Age", "Gender", "Height_cm", "Weight_kg", "BMI",
     "Country", "Occupation", "Marital_Status"
@@ -82,8 +138,7 @@ ALL_FEATURES = (
     MENTAL_FEATURES + DISEASE_FEATURES + FITNESS_FEATURES
 )
 
-TIME_COLUMNS = ["Wake_Up_Time", "Sleep_Time"]
-
+# ============ 数值特征列表 ============
 NUMERIC_COLUMNS = [
     "Age", "Height_cm", "Weight_kg", "BMI",
     "Sleep_Duration_Hours", "Sleep_Quality_Score",
@@ -105,6 +160,7 @@ NUMERIC_COLUMNS = [
     "Health_Score", "Healthy_Aging_Score"
 ]
 
+# ============ 类别特征列表 ============
 CATEGORICAL_COLUMNS = [
     "Gender", "Country", "Occupation", "Marital_Status",
     "Exercise_Type", "Morning_Workout", "Workout_Intensity",
@@ -113,5 +169,3 @@ CATEGORICAL_COLUMNS = [
     "Diabetes_Risk", "Cardiovascular_Risk", "Sleep_Disorder_Risk",
     "Fitness_Level", "Wellness_Category"
 ]
-
-ID_COLUMN = "Person_ID"
