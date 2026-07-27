@@ -24,6 +24,10 @@ print("=" * 50)
 
 # Load and clean
 df = load_and_clean_data(DATA_PATH)
+if df[ID_COLUMN].isna().any() or df[ID_COLUMN].astype(str).str.strip().eq("").any():
+    raise ValueError(f"{ID_COLUMN} contains missing or blank values")
+if df[ID_COLUMN].duplicated().any():
+    raise ValueError(f"{ID_COLUMN} must be unique before creating the split")
 
 # Build stratification key (task1 + task2 + task3 labels combined)
 df["__hs_level__"] = pd.cut(df["Health_Score"], bins=HEALTH_SCORE_BINS,
@@ -61,8 +65,8 @@ print(f"  train: {len(train_idx)}, val: {len(val_idx)}")
 print(f"  Saved: {manifest_path}")
 
 # Validation check
-assert len(manifest_df) == 10000
-assert manifest_df["Person_ID"].nunique() == 10000
+assert len(manifest_df) == len(df)
+assert manifest_df["Person_ID"].nunique() == len(df)
 assert manifest_df["Person_ID"].duplicated().sum() == 0
 assert set(manifest_df["split"].unique()) == {"train", "val"}
 print("  All validation checks PASSED")
