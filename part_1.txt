@@ -1,0 +1,83 @@
+一、三个人的角色
+成员 A：数据、公共代码与复现负责人
+核心职责：
+官方原始数据管理；
+三版清洗结果审计归档；
+preprocess.py、split.py；
+数据契约和泄漏自动检查；
+最终一键复现；
+主导任务一的无泄漏建模。
+辅助职责：
+复现 B、C 选出的最终模型；
+检查预测文件 ID、行数、标签；
+README 中的数据输入和运行流程。
+最终交付：
+data/processed/base_semantic_clean.csv
+data/splits/split_manifest.csv
+src/preprocess.py
+src/split.py
+src/data_audit.py
+tests/test_data_contract.py
+tests/test_leakage.py
+src/run_all.py
+README.md 的运行部分
+results/reproduction_report.md
+成员 B：模型、实验与数值结果负责人
+核心职责：
+公共训练、评价接口；
+三任务模型比较；
+任务二等级构造；
+任务二“回归后分级 vs 直接分类”；
+参数搜索；
+最终指标和模型比较表；
+主导任务二。
+辅助职责：
+复核任务一、三模型选择；
+检查论文所有公式、指标和数值；
+编写模型调用说明。
+最终交付：
+src/targets.py
+src/train.py
+src/evaluate.py
+config/labels.yaml
+config/features.yaml
+config/final_models.yaml
+results/final/final_metrics.csv
+results/final/model_comparison.csv
+三个最终模型文件
+三份最终预测 CSV
+调参与消融结果
+Introduction.pdf 的模型调用内容
+成员 C：图表、论文、AI 说明与提交负责人
+核心职责：
+目标分布、混淆矩阵、SHAP/特征重要性图；
+任务三类别不平衡实验；
+论文主文件和统稿；
+参考文献；
+AI 使用日志与说明；
+支撑材料整理、命名和上传；
+主导任务三。
+辅助职责：
+记录所有实验；
+检查图表与结果表的一致性；
+检查提交格式、页眉页码和文件名。
+最终交付：
+results/final/figures/
+paper/manuscript.docx
+最终论文 PDF
+AI_USAGE_LOG.md
+队伍编号 AI 使用说明.pdf
+承诺书文件
+最终支撑材料 ZIP
+提交检查表和提交成功截图
+三个人都必须理解
+以下内容不能只由一人掌握：
+任务二等级阈值：60、70、85；
+任务三实际为四分类；
+Wake_Up_Time、Fitness_Level 等字段为何泄漏；
+最终测试集为什么不能提前查看；
+三个任务分别使用哪些 X、y；
+final_metrics.csv 中每个数字如何产生；
+如何从原始 CSV 一键生成预测；
+最终三个提交文件分别包含什么；
+AI 内容在哪里被采用、怎样人工核验。
