@@ -10,7 +10,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."
 from config import ROOT_DIR, ID_COLUMN
 
 CLEAN_PATH = os.path.join(ROOT_DIR, "data", "processed", "base_semantic_clean.csv")
-RAW_PATH = os.path.join(ROOT_DIR, "datas.csv")
+RAW_PATH = os.path.join(ROOT_DIR, "data", "raw", "A题数据集.csv")
 
 
 class TestDataContract(unittest.TestCase):

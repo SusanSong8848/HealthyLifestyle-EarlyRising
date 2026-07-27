@@ -86,7 +86,7 @@ class TestLeakageTask3(unittest.TestCase):
 
     def test_fitness_level_100_pct_same(self):
         """Fitness_Level 与 Wellness_Category 100% 相同（验证一致性）"""
-        raw = pd.read_csv(os.path.join(ROOT_DIR, "datas.csv"))
+        raw = pd.read_csv(os.path.join(ROOT_DIR, "data", "raw", "A题数据集.csv"))
         # 映射：Wellness_Category 的 4 类对应 Fitness_Level 的 4 类
         self.assertTrue(
             (raw["Wellness_Category"] == raw["Fitness_Level"]).all(),

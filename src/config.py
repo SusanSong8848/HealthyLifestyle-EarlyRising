@@ -6,7 +6,7 @@ import os
 
 # ============ 路径配置 ============
 ROOT_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-DATA_PATH = os.path.join(ROOT_DIR, "datas.csv")
+DATA_PATH = os.path.join(ROOT_DIR, "data", "raw", "A题数据集.csv")
 OUTPUT_DIR = os.path.join(ROOT_DIR, "outputs")
 DATA_DIR = os.path.join(ROOT_DIR, "data")
 PROCESSED_DIR = os.path.join(DATA_DIR, "processed")

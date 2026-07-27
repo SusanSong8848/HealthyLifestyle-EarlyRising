@@ -2,7 +2,7 @@
 
 ```
 HealthyLifestyle_EarlyRising/
-├── datas.csv                         # 原始数据（本地，只读）
+├── data/raw/A题数据集.csv             # 原始数据（本地，只读）
 ├── data/
 │   ├── raw/A题数据集.csv               # 官方原始数据副本 (D27-02)
 │   ├── legacy/                        # 历史清洗版本 (D27-02)
