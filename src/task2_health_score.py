@@ -12,7 +12,7 @@ warnings.filterwarnings("ignore")
 
 from sklearn.ensemble import RandomForestClassifier, VotingClassifier
 from sklearn.linear_model import LogisticRegression
-from sklearn.model_selection import StratifiedKFold, cross_val_score, train_test_split
+from sklearn.model_selection import StratifiedKFold, cross_val_score
 from sklearn.metrics import accuracy_score, classification_report, confusion_matrix
 from sklearn.preprocessing import StandardScaler, LabelEncoder
 import xgboost as xgb
@@ -20,11 +20,16 @@ import lightgbm as lgb
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from config import (
-    DATA_PATH, TASK2_DIR,
+    DATA_PATH, TASK2_DIR, SPLITS_DIR,
     RANDOM_STATE, N_FOLDS, TASK2_LEAKY_FEATURES,
     HEALTH_SCORE_BINS, HEALTH_SCORE_LABELS, ID_COLUMN,
 )
-from clean_utils import load_and_clean_data, TASK_NUMERIC_COLS, TASK_CATEGORICAL_COLS
+from clean_utils import (
+    load_and_clean_data,
+    load_manifest_split_indices,
+    TASK_NUMERIC_COLS,
+    TASK_CATEGORICAL_COLS,
+)
 
 print("=" * 65)
 print("Task 2: Health Score Classification (v3.1)")
@@ -68,10 +73,15 @@ for col in avail_cat:
 feat_cols = avail_num + [c + "_Encoded" for c in avail_cat]
 print(f"  Features: {len(avail_num)} num + {len(avail_cat)} cat → {len(feat_cols)} total")
 
-# ==================== 4. Split ====================
-print("\n[4/6] Stratified split...")
-idx = np.arange(len(raw))
-train_idx, test_idx = train_test_split(idx, test_size=0.2, random_state=RANDOM_STATE, stratify=y_all)
+# ==================== 4. Shared split manifest ====================
+print("\n[4/6] Loading shared split manifest...")
+split_manifest_path = os.path.join(SPLITS_DIR, "split_manifest.csv")
+train_idx, test_idx = load_manifest_split_indices(
+    raw,
+    split_manifest_path,
+    id_column=ID_COLUMN,
+    label_checks={"task2_label": raw["Health_Score_Level"]},
+)
 
 X_train_raw = raw.iloc[train_idx][feat_cols].values.astype(float)
 X_test_raw = raw.iloc[test_idx][feat_cols].values.astype(float)
@@ -83,7 +93,8 @@ scaler = StandardScaler()
 X_train = scaler.fit_transform(X_train_raw)
 X_test = scaler.transform(X_test_raw)
 
-print(f"  Train: {X_train.shape[0]}, Test: {X_test.shape[0]}")
+print(f"  Manifest: {split_manifest_path}")
+print(f"  Train: {X_train.shape[0]}, Validation: {X_test.shape[0]}")
 
 # ==================== 5. CV + Model Selection ====================
 print("\n[5/6] 5-Fold CV...")

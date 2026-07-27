@@ -2,6 +2,8 @@
 Shared data cleaning utilities (v3)
 统一数据清洗 + 特征工程工具函数，消除各脚本中的代码重复。
 """
+import os
+
 import pandas as pd
 import numpy as np
 
@@ -30,7 +32,7 @@ def load_and_clean_data(data_path: str) -> pd.DataFrame:
     - Alcohol_Consumption 缺失 → "Unknown"
     - 不删行、不删列、不编码、不标准化
     """
-    df = pd.read_csv(data_path)
+    df = pd.read_csv(data_path, dtype={"Person_ID": "string"})
 
     # 时间规范化
     for col in ["Wake_Up_Time", "Sleep_Time"]:
@@ -53,6 +55,105 @@ def get_available_features(df: pd.DataFrame, numeric_cols: list,
     avail_num = [c for c in numeric_cols if c in df.columns and c not in excluded]
     avail_cat = [c for c in cat_cols if c in df.columns and c not in excluded]
     return avail_num, avail_cat
+
+
+def load_manifest_split_indices(
+    df: pd.DataFrame,
+    manifest_path: str,
+    id_column: str = "Person_ID",
+    label_checks: dict[str, pd.Series] | None = None,
+) -> tuple[np.ndarray, np.ndarray]:
+    """
+    Align the shared split manifest to ``df`` by Person_ID.
+
+    Returns row-position arrays for the ``train`` and ``val`` groups. The
+    strict checks stop a task instead of silently creating its own split when
+    the manifest is missing or belongs to another data version.
+    """
+    if id_column not in df.columns:
+        raise KeyError(f"Data is missing required ID column: {id_column}")
+    if not os.path.exists(manifest_path):
+        raise FileNotFoundError(
+            f"Shared split manifest not found: {manifest_path}. "
+            "Run src/preprocess.py (or src/split.py) first."
+        )
+
+    manifest = pd.read_csv(manifest_path, dtype={id_column: str})
+    required = {id_column, "split"}
+    missing_columns = required.difference(manifest.columns)
+    if missing_columns:
+        raise ValueError(
+            f"Split manifest is missing columns: {sorted(missing_columns)}"
+        )
+
+    data_ids = df[id_column].astype(str).str.strip()
+    manifest_ids = manifest[id_column].astype(str).str.strip()
+
+    if data_ids.duplicated().any():
+        examples = data_ids[data_ids.duplicated()].head(5).tolist()
+        raise ValueError(f"Duplicate {id_column} values in data: {examples}")
+    if manifest_ids.duplicated().any():
+        examples = manifest_ids[manifest_ids.duplicated()].head(5).tolist()
+        raise ValueError(
+            f"Duplicate {id_column} values in split manifest: {examples}"
+        )
+
+    data_id_set = set(data_ids)
+    manifest_id_set = set(manifest_ids)
+    if data_id_set != manifest_id_set:
+        missing_from_manifest = sorted(data_id_set - manifest_id_set)[:5]
+        extra_in_manifest = sorted(manifest_id_set - data_id_set)[:5]
+        raise ValueError(
+            "Data and split manifest contain different Person_ID sets. "
+            f"Missing from manifest: {missing_from_manifest}; "
+            f"extra in manifest: {extra_in_manifest}"
+        )
+
+    split_map = pd.Series(
+        manifest["split"].astype(str).str.strip().values,
+        index=manifest_ids,
+    )
+    aligned_split = data_ids.map(split_map)
+    allowed_splits = {"train", "val"}
+    actual_splits = set(aligned_split.dropna().unique())
+    if actual_splits != allowed_splits:
+        raise ValueError(
+            "Split manifest must contain exactly 'train' and 'val'; "
+            f"found {sorted(actual_splits)}"
+        )
+
+    for manifest_column, expected_values in (label_checks or {}).items():
+        if manifest_column not in manifest.columns:
+            raise ValueError(
+                f"Split manifest is missing label column: {manifest_column}"
+            )
+        expected = pd.Series(expected_values).reset_index(drop=True)
+        if len(expected) != len(df):
+            raise ValueError(
+                f"Label check {manifest_column} has {len(expected)} rows; "
+                f"expected {len(df)}"
+            )
+        expected = expected.astype(str).str.strip()
+        manifest_label_map = pd.Series(
+            manifest[manifest_column].astype(str).str.strip().values,
+            index=manifest_ids,
+        )
+        observed = data_ids.map(manifest_label_map).reset_index(drop=True)
+        mismatch = expected.ne(observed)
+        if mismatch.any():
+            example_positions = np.flatnonzero(mismatch.to_numpy())[:5].tolist()
+            raise ValueError(
+                f"Split manifest label {manifest_column} does not match "
+                f"the current data/target definition at row positions "
+                f"{example_positions}"
+            )
+
+    train_idx = np.flatnonzero(aligned_split.eq("train").to_numpy())
+    val_idx = np.flatnonzero(aligned_split.eq("val").to_numpy())
+    if len(train_idx) == 0 or len(val_idx) == 0:
+        raise ValueError("Shared split contains an empty train or val group")
+
+    return train_idx, val_idx
 
 
 # ============ 各任务的数值特征列表 ============
