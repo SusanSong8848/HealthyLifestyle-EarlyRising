@@ -1,0 +1,50 @@
+# 公共清洗规范 (v1.0, 2026-07-27 锁定)
+# 三人确认后不得修改
+
+source:
+  file: A题数据集.csv
+  rows: 10000
+  columns: 64
+  id_column: Person_ID
+
+rules:
+  time_format:
+    Wake_Up_Time: "HH:MM (zero-padded)"
+    Sleep_Time: "HH:MM (zero-padded)"
+    note: "同时新增 _Minutes 列，原始列保留"
+
+  structural_fill:
+    Exercise_Type:
+      condition: "Exercise_Frequency_Per_Week == 0 AND isna"
+      fill_value: "No Exercise"
+      count: 824
+    Workout_Intensity:
+      condition: "Exercise_Frequency_Per_Week == 0 AND isna"
+      fill_value: "No Workout"
+      count: 824
+
+  missing_fill:
+    Alcohol_Consumption:
+      fill_value: "Unknown"
+      count: 3014
+      reason: "缺失不能证明为不饮酒，只能标记信息未知"
+      forbidden: "禁止填 'No Alcohol'"
+
+  forbidden:
+    - "禁止编码 (LabelEncoder/OneHot 等)"
+    - "禁止标准化/归一化 (StandardScaler 等)"
+    - "禁止截断异常值 (IQR/3σ 截断等)"
+    - "禁止删除行或列"
+    - "禁止手工修改 CSV"
+
+validation_checks:
+  - "输出行数 == 10000"
+  - "输出列数 == 64 (或 66 含 _Minutes)"
+  - "输出缺失单元格 == 0"
+  - "Person_ID 无重复无缺失"
+  - "Unknown 数量 == 3014"
+  - "No Exercise 数量 == 824"
+  - "No Workout 数量 == 824"
+  - "所有原始数值逐值保持不变"
+  - "字段顺序不变"
+  - "非缺失值范围内无需修改"
