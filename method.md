@@ -6,6 +6,49 @@
 
 ---
 
+## 0. 项目环境与维护说明
+
+### 0.1 Python 解释器
+
+系统存在两个 Python 环境，**必须使用正确的解释器**：
+
+| 解释器 | 路径 | 状态 |
+|--------|------|------|
+| **MSYS2 Python（默认）** | `D:\msys64\ucrt64\bin\python.exe` | ❌ 无科学计算库，不可用 |
+| **Windows Python 3.12** | `D:\python\python.exe` | ✅ 已安装 pandas/numpy/matplotlib/seaborn/scikit-learn/xgboost/lightgbm |
+
+所有脚本运行命令格式：
+```bash
+D:\python\python.exe src\eda.py
+D:\python\python.exe src\preprocess.py
+D:\python\python.exe src\task1_final.py          # 推荐：最终独立版
+D:\python\python.exe src\task1_early_waker.py    # 备选：模块化版本
+D:\python\python.exe src\task2_health_score.py
+```
+
+### 0.2 运行顺序
+
+```
+Step 2: src/eda.py         → outputs/eda/*.png, *.csv（可跳过，不影响后续）
+Step 3: src/preprocess.py   → outputs/preprocess/processed_data.pkl（task1/task2 的前置依赖）
+Step 4: src/task1_final.py  → outputs/task1/predictions.csv, best_model.pkl 等
+Step 5: src/task2_health_score.py → outputs/task2/predictions.csv 等
+```
+
+### 0.3 Git 仓库维护（已完成）
+
+| 操作 | 说明 |
+|------|------|
+| **Git 瘦身** | 使用 `git filter-repo --invert-paths` 从全部历史提交中永久删除 `outputs/`、`datas.csv`、`.clinerules/` |
+| **.gitignore** | 已配置忽略 `outputs/`、`datas.csv`、`*.csv`、`*.pkl`、`.clinerules/`、`__pycache__/`、`*.ipynb` |
+| **清理效果** | `.git` 目录从 ~100 MB 降至 0.23 MB，可正常 push 到 GitHub |
+| **Force push** | 已执行，远程仓库已更新为清理后的轻量历史 |
+
+> ⚠️ `outputs/` 和 `datas.csv` 现在仅存在于本地磁盘，不在 git 跟踪中。如需重新生成 output 文件，运行对应的 Python 脚本即可。
+> ⚠️ 如果需要再次 clone 仓库，需手动将 `datas.csv` 复制到项目根目录，并运行 `src/preprocess.py` 后再运行各任务脚本。
+
+---
+
 ## 1. 问题定义
 
 **任务目标**：利用多维度健康与行为特征，构建二分类模型预测个体是否为"早起者"（Early_Waker = Yes/No）。
@@ -208,12 +251,18 @@ VotingClassifier(voting='soft')
 
 | 文件 | 路径 | 说明 |
 |------|------|------|
-| 预测结果 | `outputs/task1/predictions.csv` | 2000行，Person_ID + True_Label + Predicted_Label |
-| 特征重要性 | `outputs/task1/feature_importance.csv` | 58个特征的重要性排名（3模型平均） |
-| 评估指标 | `outputs/task1/metrics.txt` | ACC1、BalAcc、F1、Recall、各模型对比 |
-| 最佳模型 | `outputs/task1/best_model.pkl` | Voting Ensemble 序列化模型 |
-| 最终脚本 | `src/task1_final.py` | 整合方案A+方案B的严格建模流程 |
-| 参考脚本 | `run_task1_fixed.py` | 方案A的独立运行脚本 |
-| 参考脚本 | `src/task1_early_waker.py` | 标准化模块脚本 |
-| 清洗数据 | `outputs/preprocess/Data_clean.csv` | 缺失值填充后、编码前的清洗数据 |
+| 预测结果（Task1） | `outputs/task1/predictions.csv` | 2000行，Person_ID + True_Label + Predicted_Label |
+| 特征重要性（Task1） | `outputs/task1/feature_importance.csv` | 58个特征的重要性排名（3模型平均） |
+| 评估指标（Task1） | `outputs/task1/metrics.txt` | ACC1、BalAcc、F1、Recall、各模型对比 |
+| 最佳模型（Task1） | `outputs/task1/best_model.pkl` | Voting Ensemble 序列化模型 |
+| Task2 预测结果 | `outputs/task2/predictions.csv` | ACC2 = 0.8050 |
+| 最终脚本（Task1） | `src/task1_final.py` | 整合方案A+方案B的严格建模流程（**推荐**） |
+| 参考脚本（Task1） | `src/task1_early_waker.py` | 模块化脚本（依赖 preprocess.py 的 processed_data.pkl） |
+| Task2 脚本 | `src/task2_health_score.py` | Health Score 四分类模型 |
 | 预处理脚本 | `src/preprocess.py` | 数据清洗 + 编码 + 划分 |
+| EDA 脚本 | `src/eda.py` | 可视化探索性数据分析 |
+| 全局配置 | `src/config.py` | 路径、特征列表、超参数 |
+| 清洗数据 | `outputs/preprocess/Data_clean.csv` | 缺失值填充后、编码前的清洗数据 |
+| 预处理数据 | `outputs/preprocess/processed_data.pkl` | task1_early_waker.py 和 task2 的输入 |
+| 项目计划 | `Plan.md` | 完整项目结构和实现步骤 |
+| Git 忽略规则 | `.gitignore` | 已忽略 outputs/、datas.csv、*.pkl、*.csv 等 |
