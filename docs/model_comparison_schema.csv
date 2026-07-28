@@ -1,0 +1,28 @@
+field_name,dtype,required,description
+task_id,string,yes,task1/task2/task3
+data_version,string,yes,公共清洗数据文件 SHA256
+split_version,string,yes,公共 split_manifest.csv SHA256
+approach,string,yes,建模或消融路线
+model_family,string,yes,模型族名称
+model,string,yes,模型显示名称
+params_json,string,yes,排序后的 JSON 参数
+split,string,yes,cv_train_mean 或 val
+seed,int,yes,统一随机种子
+n_samples,int,yes,该行评估样本量
+cv_folds,int,yes,CV 折数；验证集行为 0
+class_order,string,yes,竖线连接的固定类别顺序
+accuracy,float,yes,Accuracy
+macro_f1,float,yes,Macro-F1
+balanced_accuracy,float,yes,Balanced Accuracy
+roc_auc,float,no,任务一 ROC-AUC
+mae,float,no,任务二有序编码 MAE
+rmse,float,no,任务二有序编码 RMSE
+recall_poor,float,no,任务三 Poor Recall
+recall_average,float,no,任务三 Average Recall
+recall_good,float,no,任务三 Good Recall
+recall_excellent,float,no,任务三 Excellent Recall
+runtime_sec,float,yes,运行耗时秒
+output_path,string,yes,预测或正式产物路径
+selected_within_family,bool,yes,是否为模型族最佳参数
+selected_within_approach,bool,yes,是否为路线优胜者
+is_primary,bool,yes,是否为当前任务主候选
