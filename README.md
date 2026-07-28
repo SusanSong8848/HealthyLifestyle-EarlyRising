@@ -8,11 +8,11 @@
 
 | 任务 | 预测目标 | 类型 | ACC | 最优模型 | 权重 |
 |------|---------|------|:---:|------|:---:|
-| Task 1 | Early_Waker | 二分类 | 0.7690 | Logistic Regression | 20% |
-| Task 2 | Health_Score Level | 四分类 | 0.8120 | Logistic Regression | 40% |
-| Task 3 | Wellness_Category | 四分类 | 0.8160 | LightGBM (balanced) | 40% |
+| Task 1 | Early_Waker | 二分类 | 0.7535 | Logistic Regression | 20% |
+| Task 2 | Health_Score Level | 四分类 | 0.8135 | Logistic Regression | 40% |
+| Task 3 | Wellness_Category | 四分类 | 0.8170 | LightGBM (balanced) | 40% |
 
-**初赛总分：81.64 / 100.00**
+**初赛总分：80.25 / 100.00**
 
 ---
 
@@ -175,9 +175,9 @@ D:\python\python.exe -m unittest tests.test_data_contract tests.test_leakage tes
 
 ```
 初赛成绩 = ACC1 × 100 × 20% + ACC2 × 100 × 40% + ACC3 × 100 × 40%
-         = 76.90 × 0.2 + 81.20 × 0.4 + 81.60 × 0.4
-         = 15.38 + 32.48 + 32.64
-         = 81.64
+         = 75.35 × 0.2 + 81.35 × 0.4 + 81.70 × 0.4
+         = 15.07 + 32.54 + 32.68
+         = 80.25
 ```
 
 ---

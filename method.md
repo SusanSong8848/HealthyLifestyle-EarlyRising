@@ -83,10 +83,10 @@ D:\python\python.exe src\task3_wellness_category.py       # 任务3: Wellness Ca
 
 | 模型 | Test ACC1 | BalAcc | F1(Yes) | Recall(Yes) |
 |------|:---:|:---:|:---:|:---:|
-| **Logistic Regression** ★ | **0.7690** | 0.7559 | 0.7094 | 0.6779 |
+| **Logistic Regression** ★ | **0.7535** | 0.7514 | 0.6842 | 0.6478 |
 | Voting Ensemble | 0.7585 | 0.7424 | 0.6902 | 0.6466 |
 
-**得分：15.38 / 20.00**
+**得分：15.07 / 20.00**
 
 ### 3.5 特征重要性（Top 5）
 
@@ -160,9 +160,10 @@ D:\python\python.exe src\task3_wellness_category.py       # 任务3: Wellness Ca
 | 任务 | ACC | 权重 | 得分 | 最优模型 |
 |------|:---:|:---:|:---:|------|
 | Task 1 | 0.7690 | 20% | 15.38 | Logistic Regression |
-| Task 2 | 0.8120 | 40% | 32.48 | Logistic Regression |
-| Task 3 | 0.8160 | 40% | 32.64 | LightGBM |
-| **初赛总分** | | | **81.64 / 100.00** | |
+| Task 1 | 0.7535 | 20% | 15.07 | Logistic Regression |
+| Task 2 | 0.8135 | 40% | 32.54 | Logistic Regression |
+| Task 3 | 0.8170 | 40% | 32.68 | LightGBM |
+| **初赛总分** | | | **80.25 / 100.00** | |
 
 ---
 

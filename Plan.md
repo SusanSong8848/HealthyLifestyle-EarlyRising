@@ -1,4 +1,4 @@
-# 项目文件结构（v3.1 Final — D27 交付版）
+# 项目文件结构（v3.2 Final — D28 交付版）
 
 ```
 HealthyLifestyle_EarlyRising/
