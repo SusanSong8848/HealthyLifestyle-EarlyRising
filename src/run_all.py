@@ -5,13 +5,13 @@
 import os, sys, subprocess, time
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-PYTHON = r"D:\python\python.exe"
+PYTHON = sys.executable
 
 SCRIPTS = [
     ("preprocess.py", "数据预处理"),
     ("task1_final.py", "任务1 — Early Waker 二分类"),
     ("task2_health_score.py", "任务2 — Health Score 四分类"),
-    ("task3_wellness_category.py", "任务3 — Wellness Category 四分类"),
+    ("task3.py", "任务3 — Wellness Category 四分类"),
 ]
 
 def run_script(script, description):
@@ -43,5 +43,5 @@ if __name__ == "__main__":
 
     print(f"\n{'='*60}")
     print(f"  ALL SCRIPTS COMPLETED in {time.time()-t_start:.0f}s")
-    print(f"  outputs/ → task1/, task2/, task3/")
+    print("  Task 1/2 outputs → outputs/; Task 3 outputs → results/")
     print(f"{'='*60}")
