@@ -8,16 +8,37 @@ import os
 ROOT_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 DATA_PATH = os.path.join(ROOT_DIR, "data", "raw", "A题数据集.csv")
 OUTPUT_DIR = os.path.join(ROOT_DIR, "outputs")
+RESULTS_DIR = os.path.join(ROOT_DIR, "results")
+MODELS_DIR = os.path.join(ROOT_DIR, "models")
 DATA_DIR = os.path.join(ROOT_DIR, "data")
 PROCESSED_DIR = os.path.join(DATA_DIR, "processed")
 SPLITS_DIR = os.path.join(DATA_DIR, "splits")
 
 TASK1_DIR = os.path.join(OUTPUT_DIR, "task1")
 TASK2_DIR = os.path.join(OUTPUT_DIR, "task2")
-TASK3_DIR = os.path.join(OUTPUT_DIR, "task3")
 EDA_DIR = os.path.join(OUTPUT_DIR, "eda")
 
-for d in [TASK1_DIR, TASK2_DIR, TASK3_DIR, EDA_DIR, PROCESSED_DIR, SPLITS_DIR]:
+# Task 3 follows the single-source paths defined in progress.xlsx.
+METRICS_RAW_DIR = os.path.join(RESULTS_DIR, "metrics", "raw")
+FIGURES_BASELINE_DIR = os.path.join(RESULTS_DIR, "figures", "baseline")
+FIGURES_CANDIDATE_DIR = os.path.join(RESULTS_DIR, "figures", "candidate")
+PREDICTIONS_CANDIDATE_DIR = os.path.join(
+    RESULTS_DIR, "predictions", "candidate"
+)
+TASK3_CANDIDATE_MODEL_DIR = os.path.join(MODELS_DIR, "candidate", "task3")
+
+for d in [
+    TASK1_DIR,
+    TASK2_DIR,
+    EDA_DIR,
+    PROCESSED_DIR,
+    SPLITS_DIR,
+    METRICS_RAW_DIR,
+    FIGURES_BASELINE_DIR,
+    FIGURES_CANDIDATE_DIR,
+    PREDICTIONS_CANDIDATE_DIR,
+    TASK3_CANDIDATE_MODEL_DIR,
+]:
     os.makedirs(d, exist_ok=True)
 
 # ============ 随机种子 & 切分配置 ============
