@@ -1,7 +1,7 @@
 # 建模方法论：三任务完整方案
 
-> 版本：v3.1 Final（整合队友公共要求 + CV制导模型选择）
-> 日期：2026-07-27
+> 版本：v3.3（统一任务3入口、结果目录与类别权重消融）
+> 日期：2026-07-28
 
 ---
 
@@ -20,8 +20,10 @@ D:\python\python.exe src\eda.py                         # EDA（可跳过）
 D:\python\python.exe src\preprocess.py                   # 统一数据预处理
 D:\python\python.exe src\task1_final.py                  # 任务1: Early Waker
 D:\python\python.exe src\task2_health_score.py            # 任务2: Health Score
-D:\python\python.exe src\task3_wellness_category.py       # 任务3: Wellness Category
+D:\python\python.exe src\task3.py                         # 任务3: Wellness Category
 ```
+
+一键复现脚本 `src/run_all.py` 使用当前启动它的 Python 解释器（`sys.executable`），上述 `D:\python\python.exe` 仅为 A 当前环境的命令示例。
 
 ---
 
@@ -48,7 +50,7 @@ D:\python\python.exe src\task3_wellness_category.py       # 任务3: Wellness Ca
 |------|-----------|------|
 | **Task 1** | `Wake_Up_Time`, `Sleep_Time`, `Sleep_Duration_Hours` | 起床时间<6:30 与标签100%一致；三位一体排除 |
 | **Task 2** | `Health_Score`（标签来源）, `Wellness_Category`, `Fitness_Level` | 等级信息由 Health_Score 形成，留任意一个即泄露 |
-| **Task 3** | `Wellness_Category`（目标）, `Health_Score`（按45/65/80可100%还原）, `Fitness_Level`（与目标100%相同） | |
+| **Task 3** | `Wellness_Category`（目标）, `Health_Score`（按45/65/80可100%还原）, `Fitness_Level`（与目标100%相同）, `Early_Waker`, `Wake_Up_Time`, `Sleep_Time`, `Wake_Up_Time_Minutes`, `Sleep_Time_Minutes` | 前三项属于直接目标泄漏；早起标签与直接时间字段为保守排除项，避免任务间标签与时间定义混入 |
 | **全部** | `Healthy_Aging_Score` | 可疑综合评分，主模型排除（消融实验可加入） |
 | **全部** | `Person_ID` | 仅用于切分和提交，不能进入模型 |
 
@@ -98,7 +100,7 @@ D:\python\python.exe src\task3_wellness_category.py       # 任务3: Wellness Ca
 | 4 | Health_Score | 2.33% |
 | 5 | Daily_Calorie_Intake | 2.28% |
 
-58个特征重要性均匀分散——早起行为是多维度生活方式的综合体现。
+特征重要性较为分散——早起行为是多维度生活方式的综合体现；具体特征数以当次运行输出为准。
 
 ---
 
@@ -141,28 +143,66 @@ D:\python\python.exe src\task3_wellness_category.py       # 任务3: Wellness Ca
 
 ### 5.2 处理策略
 
-- `class_weight='balanced'` 处理 Poor 类极端不平衡（仅 91 条训练样本）
-- CV制导选择最优单模型
+- 任务标签按 `Poor → 0、Average → 1、Good → 2、Excellent → 3` 固定映射。
+- 读取 `data/splits/split_manifest.csv`，保证与任务1、任务2使用完全相同的训练/验证人员。
+- 删除 `Person_ID`、`Wellness_Category`、`Health_Score`、`Fitness_Level`、`Healthy_Aging_Score` 及直接时间字段，避免目标泄漏或可疑综合评分进入主模型。
+- 数值缺失填补与标准化、类别缺失填补与 One-Hot 编码均放入 `sklearn Pipeline`，每个交叉验证折只在该折训练部分拟合。
+- 基线固定为 `DummyClassifier(strategy="most_frequent")` 和无权重多项逻辑回归。
+- 候选模型使用逻辑回归、随机森林、XGBoost（环境可用时）及 LightGBM。
+- 模型选择只使用训练集五折交叉验证结果，优先级为 `Macro-F1 → Balanced Accuracy → Accuracy`；验证集只用于一次最终报告，不参与选模。
 
-### 5.3 模型选择
+### 5.3 类别权重受控消融
 
-| 模型 | 5-Fold CV | Test ACC3 |
-|------|:---:|:---:|
-| **LightGBM** ★ | **0.8174±0.0068** | **0.8160** |
-| Logistic Regression | 0.8171±0.0049 | — |
+为判断类别权重是否真正改善少数类，而不是把参数变化混在一起，固定 LightGBM 的以下参数：
 
-**得分：32.64 / 40.00**
+- `n_estimators=300`
+- `max_depth=8`
+- `learning_rate=0.05`
+- `num_leaves=63`
+- `random_state=20260726`
+
+只改变一个条件：
+
+| 消融组 | `class_weight` | 其他参数 |
+|------|------|------|
+| 无权重 | `None` | 完全相同 |
+| 类别权重 | `"balanced"` | 完全相同 |
+
+两组均报告 CV 与验证集的 Accuracy、Macro-F1、Balanced Accuracy 和 Poor Recall，并在 `results/metrics/raw/task3_weight_ablation.csv` 中保存相对无权重组的差值。是否采用类别权重由结果决定，不能预先假定 `"balanced"` 一定更好。
+
+### 5.4 评价与输出
+
+| 文件 | 作用 |
+|------|------|
+| `results/metrics/raw/task3_baseline.csv` | Dummy 与无权重逻辑回归基线 |
+| `results/metrics/raw/task3_model_comparison.csv` | 全部候选模型的 CV、验证指标和唯一 `Selected=True` 行 |
+| `results/metrics/raw/task3_weight_ablation.csv` | 无权重/类别权重 LightGBM 受控比较 |
+| `results/metrics/raw/task3_classification_report.csv` | 最终模型四类 precision、recall、F1 |
+| `results/figures/baseline/task3_confusion_matrix.png/.csv` | 无权重逻辑回归基线混淆矩阵图片及计数 |
+| `results/figures/candidate/task3_confusion_matrix.png/.csv` | 最终候选模型混淆矩阵图片及计数 |
+| `results/figures/candidate/task3_feature_importance.png` | 最终候选模型 Top 20 特征重要性 |
+| `results/metrics/raw/task3_feature_importance.csv` | 最终候选模型完整特征重要性 |
+| `results/metrics/raw/task3_features_used.csv` | 主模型实际使用的原始字段清单 |
+| `results/metrics/raw/task3_metrics.json/.pkl/.txt` | 指标、配置和审计元数据 |
+| `results/predictions/candidate/task3_predictions.csv` | 验证集逐人真实/预测标签 |
+| `models/candidate/task3/task3_best_model.pkl` | 可直接复现预测的完整 Pipeline |
+
+### 5.5 当前结果状态
+
+v3.1 曾得到 `ACC3=0.8160`，但该结果来自旧脚本和旧评价口径，只作为历史基线。v3.3 必须完整重跑后，才能从 `task3_model_comparison.csv` 的 `Selected=True` 行填写最终 ACC3、Macro-F1、Balanced Accuracy、四类 Recall 和模型名称。
 
 ---
 
-## 6. 最终总评分
+## 6. 历史基线总评分（待 v3.3 重跑更新）
 
 | 任务 | ACC | 权重 | 得分 | 最优模型 |
 |------|:---:|:---:|:---:|------|
 | Task 1 | 0.7690 | 20% | 15.38 | Logistic Regression |
 | Task 2 | 0.8120 | 40% | 32.48 | Logistic Regression |
-| Task 3 | 0.8160 | 40% | 32.64 | LightGBM |
+| Task 3 | 0.8160（旧） | 40% | 32.64（旧） | LightGBM（旧） |
 | **初赛总分** | | | **81.64 / 100.00** | |
+
+> 最终论文不得直接引用本表的 Task 3 数值。重跑后以 `results/metrics/raw/task3_model_comparison.csv` 和 `task3_metrics.json` 为唯一结果源，并同步更新总分。
 
 ---
 
