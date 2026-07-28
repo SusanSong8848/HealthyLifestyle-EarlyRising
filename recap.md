@@ -27,7 +27,7 @@ EDA（Exploratory Data Analysis，探索性数据分析）脚本，用于在建�
 |------|------|
 | **是什么** | 三类目标变量的可视化分布图 |
 | **内容** | 左：Early_Waker 饼图（Yes/No 占比）；中：Health_Score 直方图（连续值分布）；右：Wellness_Category 柱状图（各类计数） |
-| **用途** | 了解类别平衡性。Early_Waker 约 41.6% Yes / 58.4% No，基本平衡；Wellness_Category 中 Poor 仅 114 条（1.1%），提示任务3需要 class_weight='balanced' 处理 |
+| **用途** | 了解类别平衡性。Early_Waker 约 41.6% Yes / 58.4% No，基本平衡；Wellness_Category 中 Poor 仅 114 条（1.1%），提示任务3必须比较无权重与 `class_weight='balanced'`，并重点检查 Poor Recall |
 
 ### 4. `categorical_vs_target.png`
 | 项目 | 说明 |
@@ -54,7 +54,9 @@ EDA（Exploratory Data Analysis，探索性数据分析）脚本，用于在建�
 
 ## 二、`src/preprocess.py` → `data/processed/` + `data/splits/`
 
-预处理脚本，执行统一清洗+编码+标准化+切分。**是所有后续任务的前置依赖**，三个任务脚本（task1_final.py、task2_health_score.py、task3_wellness_category.py）都是独立版，不依赖此脚本的输出——但 task1_early_waker.py（备选）依赖 `processed_data.pkl`。
+预处理脚本，执行统一语义清洗并生成共享切分。**是所有后续任务的前置依赖**。任务脚本（task1_final.py、task2_health_score.py、task3.py）读取同一份 `split_manifest.csv`；其中任务3的编码、缺失填补和标准化在模型 Pipeline 内按训练折拟合。
+
+> `processed_data.pkl`、`encoders.pkl`、`scaler.pkl` 是 Task 1/2 与旧代码的兼容产物；Task 3 不读取这三项。
 
 ### 1. `base_semantic_clean.csv`
 | 项目 | 说明 |
@@ -161,29 +163,42 @@ EDA（Exploratory Data Analysis，探索性数据分析）脚本，用于在建�
 
 ---
 
-## 五、`src/task3_wellness_category.py` → `outputs/task3/`
+## 五、`src/task3.py` → 统一结果目录
 
-### 1. `predictions.csv`
-| 项目 | 说明 |
-|------|------|
-| **是什么** | 任务3的最终预测结果表 |
-| **格式** | `Person_ID` + `True_Label` + `Predicted_Label`（2000行，四类含 Poor） |
-| **特殊说明** | 题面写"三分类 Excellent/Good/Average"，但数据中实际有 114 条 Poor。模型按四分类处理，论文中需说明这点 |
-| **得分** | ACC3 = 0.8160（使用了 class_weight='balanced' 处理 Poor 类的极端不平衡） |
+> v3.1 的 `ACC3=0.8160`、LightGBM 最优和固定“56个特征”均为历史记录。v3.3 完整重跑前不得把它们写进最终论文。
 
-### 2. `feature_importance.csv`
-| 项目 | 说明 |
-|------|------|
-| **是什么** | 56个特征的重要性排名（排除了 Wellness_Category、Health_Score、Fitness_Level 等泄漏特征） |
-| **Top 3 特征** | Energy_Level_Score、BMI、Mood_Score（与 Task 2 类似，因为两个目标高度相关） |
+### 1. 基线结果
 
-### 3. `best_model.pkl`
-| 项目 | 说明 |
+| 文件 | 说明 |
 |------|------|
-| **模型类型** | `LGBMClassifier(n_estimators=300, max_depth=8, learning_rate=0.05, class_weight='balanced')` |
-| **为什么不是 Logistic Regression** | Task3 中 LightGBM 的 CV（0.8174）微优于 LR（0.8171），且 LR 的 Recall(Poor) 接近 0。LGB + class_weight=balanced 组合在保持整体准确率的同时，对 Poor 类的 Recall 有实质提升 |
+| `results/metrics/raw/task3_baseline.csv` | 两行基线：Dummy Most Frequent 与 Logistic Regression (Unweighted)。包含 CV/验证 Accuracy、Macro-F1、Balanced Accuracy 和四类 Recall |
+| `results/figures/baseline/task3_confusion_matrix.png` | 无权重逻辑回归在共享验证集上的四分类混淆矩阵 |
+| `results/figures/baseline/task3_confusion_matrix.csv` | 与图片对应的精确计数，便于论文核对 |
 
-### 4. `metrics.pkl` / `metrics.txt`
-| 项目 | 说明 |
+### 2. 模型比较与类别权重消融
+
+| 文件 | 说明 |
 |------|------|
-| **内容** | ACC3=0.8160、四类 precision/recall/f1（Poor 的 Precision=0.80 但 Recall=0.17，因为只有 23 条测试样本）、5折CV结果、类别分布 |
+| `results/metrics/raw/task3_model_comparison.csv` | 全部候选模型的五折 CV 与验证指标；只允许一行 `Selected=True` |
+| `results/metrics/raw/task3_weight_ablation.csv` | 固定 LightGBM 其他参数，只比较 `class_weight=None` 与 `"balanced"`；保存两组原始指标及相对无权重组的差值 |
+| `results/metrics/raw/task3_classification_report.csv` | 选中模型的 Poor/Average/Good/Excellent precision、recall、F1 |
+| `results/metrics/raw/task3_metrics.json` | 最终模型名、ACC3、Macro-F1、Balanced Accuracy、四类 Recall、样本数、seed、折数和特征数的机器可读摘要 |
+
+### 3. 图、预测与模型
+
+| 文件 | 说明 |
+|------|------|
+| `results/figures/candidate/task3_confusion_matrix.png` | CV 选中模型在共享验证集上的混淆矩阵 |
+| `results/figures/candidate/task3_confusion_matrix.csv` | 与候选模型混淆矩阵图片对应的精确计数 |
+| `results/figures/candidate/task3_feature_importance.png` | 选中模型 Top 20 特征重要性图 |
+| `results/metrics/raw/task3_feature_importance.csv` | 完整特征重要性表；逻辑回归取各类别绝对系数均值，树模型使用原生重要性 |
+| `results/metrics/raw/task3_features_used.csv` | 实际进入 Task 3 主模型的原始字段及数值/类别类型 |
+| `results/predictions/candidate/task3_predictions.csv` | `Person_ID + True_Label + Predicted_Label`，预期 2000 行且包含 Poor 类 |
+| `models/candidate/task3/task3_best_model.pkl` | 包含填补、One-Hot、标准化和分类器的完整 Pipeline |
+
+### 4. 论文引用规则
+
+1. ACC3、Macro-F1、Balanced Accuracy 和四类 Recall：读取 `task3_model_comparison.csv` 中唯一的 `Selected=True` 行。
+2. 类别权重结论：读取 `task3_weight_ablation.csv`，不能只看 Accuracy，必须同时比较 Macro-F1 与 Poor Recall。
+3. 编码后特征数：读取 `task3_metrics.json` 的 `transformed_features_used`，不写死。
+4. 任何运行后手工改动的数字都不能作为正式结果；结果变化时重新运行脚本并同步更新论文。
