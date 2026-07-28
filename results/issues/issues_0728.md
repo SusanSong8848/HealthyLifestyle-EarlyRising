@@ -25,7 +25,7 @@ Person_ID 均与 `split_manifest.csv` 完全一致，指标已由测试独立重
 
 | 问题 ID | 影响任务 | 缺失或异常 | 负责人 | 解除条件 | 状态 |
 |---|---|---|---|---|---|
-| I-0728-00 | 分支同步 | 首次连接曾出现 504、DNS 线程和 SSH 拒绝；17:30 已成功 fetch，确认 origin/main=e761cfe | B | 将 origin/main 依次并入 D27、D28 并推送 | 已解除 |
+| I-0728-00 | 分支同步 | 首次连接曾出现 504、DNS 线程和 SSH 拒绝；17:30 已成功 fetch，origin/main=e761cfe 已依次并入 D27、D28 并推送 | B | 无 | 已完成 |
 | I-0728-01 | D28-01 / D28-04 | `task1_model_comparison.csv`、`task1_leakage_ablation.csv` 未收到 | A | A 按统一 schema 提交正式文件 | 未收到 |
 | I-0728-02 | D28-03 / D28-04 | `task3_model_comparison.csv`、`task3_weight_ablation.csv` 未收到 | C | C 按统一 schema 提交正式文件 | 未收到 |
 | I-0728-03 | D28-05 | 三任务入围候选复现报告未收到 | A | 复现差异不超过 1e-4 且结论一致 | 未收到 |
