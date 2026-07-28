@@ -35,7 +35,7 @@ print("=" * 65)
 
 # ============ 1. Load raw data ============
 print("\n[1/8] Loading raw data...")
-df = pd.read_csv(DATA_PATH)
+df = pd.read_csv(DATA_PATH, dtype={ID_COLUMN: "string"})
 print(f"  Shape: {df.shape}")
 
 # ============ 2. Time normalization ============
