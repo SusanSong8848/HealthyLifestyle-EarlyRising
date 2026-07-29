@@ -2,7 +2,7 @@
 D28 高质量版：泄漏消融 + 模型比较 + 复现报告
 完全独立，只依赖原始数据 data/raw/A题数据集.csv
 """
-import pandas as pd, numpy as np, os, time, hashlib
+import pandas as pd, numpy as np, os, time, hashlib, json
 from sklearn.model_selection import cross_val_score, StratifiedKFold, train_test_split
 from sklearn.linear_model import LogisticRegression
 from sklearn.ensemble import RandomForestClassifier
@@ -163,11 +163,15 @@ try:
 except:
     task2_acc = 0.8135  # fallback
 
-try:
-    t3 = pd.read_csv('outputs/task3/predictions.csv')
-    task3_acc = (t3['True_Label'] == t3['Predicted_Label']).mean()
-except:
-    task3_acc = 0.8170  # fallback
+task3_metrics_path = 'results/metrics/raw/task3_metrics.json'
+if not os.path.exists(task3_metrics_path):
+    raise FileNotFoundError(
+        'Task 3 metrics are missing. Run `python src/task3.py` first.'
+    )
+with open(task3_metrics_path, 'r', encoding='utf-8') as handle:
+    task3_metrics = json.load(handle)
+task3_acc = float(task3_metrics['ACC3'])
+task3_model = str(task3_metrics['best_model'])
 
 # ====== Step 8: Reproduction Report ======
 print('\n=== D28-05: Reproduction Report ===')
@@ -187,7 +191,7 @@ report = f"""# Reproduction Report — D28 Candidate
 |------|--------|:---:|:---:|:---:|------|
 | Task 1 | Early_Waker (No/Yes) | {task1_acc:.4f} | 20% | {task1_acc*20:.2f} | {best_name} |
 | Task 2 | Health_Score_Level (4-class) | {task2_acc:.4f} | 40% | {task2_acc*40:.2f} | Logistic Regression |
-| Task 3 | Wellness_Category (4-class) | {task3_acc:.4f} | 40% | {task3_acc*40:.2f} | LightGBM (balanced) |
+| Task 3 | Wellness_Category (4-class) | {task3_acc:.4f} | 40% | {task3_acc*40:.2f} | {task3_model} |
 | **Total** | | | | **{total:.2f} / 100.00** | |
 
 ## Leakage Ablation (Task 1, LR 5-Fold CV)
@@ -215,10 +219,10 @@ report += f"""
 ## Reproduction Commands
 
 ```bash
-D:\\python\\python.exe src\\preprocess.py
-D:\\python\\python.exe src\\task1_final.py
-D:\\python\\python.exe src\\task2_health_score.py
-D:\\python\\python.exe src\\task3_wellness_category.py
+python src\\preprocess.py
+python src\\task1_final.py
+python src\\task2_health_score.py
+python src\\task3.py
 ```
 """
 

@@ -1,11 +1,12 @@
 """
-Task 3 - Wellness Category Prediction (v3.3)
+Task 3 - Wellness Category Prediction (v3.4)
 
 Guarantees:
 - Uses the shared Person_ID split manifest.
 - Excludes target and known leakage fields.
 - Fits encoding/scaling inside every cross-validation fold.
-- Selects the final model by CV Macro-F1, then Balanced Accuracy and Accuracy.
+- Selects the final model by CV Accuracy, matching the official ACC3 score.
+- Uses Macro-F1 and Balanced Accuracy as tie-breakers and diagnostics.
 - Uses the shared validation split only for final reporting.
 - Writes the exact D27/D28 filenames defined in progress.xlsx.
 - Compares unweighted and class-balanced LightGBM with all else fixed.
@@ -88,6 +89,8 @@ WEIGHT_ABLATION_MODEL_NAMES = [
     "LightGBM (Unweighted)",
     "LightGBM (Balanced)",
 ]
+LOGISTIC_C_GRID = (0.1, 0.3, 1.0, 3.0, 10.0)
+TUNED_LOGISTIC_PREFIX = "Logistic Regression (Tuned C="
 LIGHTGBM_COMMON_PARAMS = {
     "n_estimators": 300,
     "max_depth": 8,
@@ -253,6 +256,34 @@ def build_model_pipelines(
     return pipelines
 
 
+def build_logistic_tuning_pipelines(
+    numeric_columns: list[str],
+    categorical_columns: list[str],
+) -> OrderedDict[str, Pipeline]:
+    """Create a small, training-CV-only regularization search."""
+    pipelines: OrderedDict[str, Pipeline] = OrderedDict()
+    for c_value in LOGISTIC_C_GRID:
+        model_name = f"{TUNED_LOGISTIC_PREFIX}{c_value:g})"
+        pipelines[model_name] = Pipeline(
+            [
+                (
+                    "preprocessor",
+                    build_preprocessor(numeric_columns, categorical_columns),
+                ),
+                (
+                    "classifier",
+                    LogisticRegression(
+                        max_iter=3000,
+                        random_state=RANDOM_STATE,
+                        C=c_value,
+                        class_weight=None,
+                    ),
+                ),
+            ]
+        )
+    return pipelines
+
+
 def validate_required_models(models: OrderedDict[str, Pipeline]) -> None:
     """Fail before training rather than silently omit the required ablation."""
     missing = [
@@ -395,7 +426,7 @@ def run_cross_validation(
 
 
 def select_best_model(comparison: pd.DataFrame) -> str:
-    """Select by CV metrics only; validation metrics never enter this rule."""
+    """Select by training CV only, led by the official Accuracy metric."""
     required = {
         "Model",
         "CV_Macro_F1_Mean",
@@ -407,9 +438,9 @@ def select_best_model(comparison: pd.DataFrame) -> str:
         raise ValueError(f"Missing comparison columns: {sorted(missing)}")
     ranked = comparison.sort_values(
         [
+            "CV_Accuracy_Mean",
             "CV_Macro_F1_Mean",
             "CV_Balanced_Accuracy_Mean",
-            "CV_Accuracy_Mean",
             "Model",
         ],
         ascending=[False, False, False, True],
@@ -460,9 +491,9 @@ def add_validation_metrics(
     result["Selected"] = result["Model"].eq(selected_model)
     result = result.sort_values(
         [
+            "CV_Accuracy_Mean",
             "CV_Macro_F1_Mean",
             "CV_Balanced_Accuracy_Mean",
-            "CV_Accuracy_Mean",
             "Model",
         ],
         ascending=[False, False, False, True],
@@ -477,41 +508,23 @@ def extract_feature_importance(
     x_val: pd.DataFrame,
     y_val: np.ndarray,
 ) -> pd.DataFrame:
-    """Support tree importance, logistic coefficients and a safe fallback."""
-    preprocessor = fitted_pipeline.named_steps["preprocessor"]
-    classifier = fitted_pipeline.named_steps["classifier"]
-    transformed_names = np.asarray(
-        preprocessor.get_feature_names_out(),
-        dtype=str,
+    """Measure paper-facing importance at the original-feature level."""
+    result = permutation_importance(
+        fitted_pipeline,
+        x_val,
+        y_val,
+        scoring="accuracy",
+        n_repeats=5,
+        random_state=RANDOM_STATE,
+        n_jobs=1,
     )
-    if hasattr(classifier, "coef_"):
-        raw_importance = np.mean(np.abs(classifier.coef_), axis=0)
-        feature_names = transformed_names
-        method = "mean_absolute_logistic_coefficient"
-    elif hasattr(classifier, "feature_importances_"):
-        raw_importance = np.asarray(classifier.feature_importances_, dtype=float)
-        feature_names = transformed_names
-        method = "native_tree_importance"
-    else:
-        result = permutation_importance(
-            fitted_pipeline,
-            x_val,
-            y_val,
-            scoring=make_scorer(
-                f1_score,
-                labels=list(range(len(CLASS_ORDER))),
-                average="macro",
-                zero_division=0,
-            ),
-            n_repeats=5,
-            random_state=RANDOM_STATE,
-            n_jobs=1,
-        )
-        raw_importance = np.abs(result.importances_mean)
-        feature_names = np.asarray(x_val.columns, dtype=str)
-        method = "permutation_macro_f1"
-
-    raw_importance = np.asarray(raw_importance, dtype=float).reshape(-1)
+    signed_importance = np.asarray(
+        result.importances_mean,
+        dtype=float,
+    ).reshape(-1)
+    raw_importance = np.maximum(signed_importance, 0.0)
+    feature_names = np.asarray(x_val.columns, dtype=str)
+    method = "permutation_accuracy_original_feature"
     if len(feature_names) != len(raw_importance):
         raise ValueError(
             "Feature importance/name length mismatch: "
@@ -525,6 +538,11 @@ def extract_feature_importance(
                 "Feature": feature_names,
                 "Importance": normalized,
                 "Raw_Importance": raw_importance,
+                "Signed_Mean_Accuracy_Decrease": signed_importance,
+                "Std_Accuracy_Decrease": np.asarray(
+                    result.importances_std,
+                    dtype=float,
+                ),
                 "Method": method,
             }
         )
@@ -646,6 +664,7 @@ def save_outputs(
     y_pred: np.ndarray,
     baseline_pred: np.ndarray,
     comparison: pd.DataFrame,
+    tuning_comparison: pd.DataFrame,
     weight_ablation: pd.DataFrame,
     best_model_name: str,
     best_pipeline: Pipeline,
@@ -696,6 +715,11 @@ def save_outputs(
 
     comparison.to_csv(
         os.path.join(METRICS_RAW_DIR, "task3_model_comparison.csv"),
+        index=False,
+        encoding="utf-8-sig",
+    )
+    tuning_comparison.to_csv(
+        os.path.join(METRICS_RAW_DIR, "task3_tuning.csv"),
         index=False,
         encoding="utf-8-sig",
     )
@@ -770,8 +794,9 @@ def save_outputs(
         **validation_metrics,
         "best_model": best_model_name,
         "selection_rule": (
-            "Highest 5-fold CV Macro-F1; tie-break by CV Balanced Accuracy, "
-            "then CV Accuracy. Validation metrics are not used for selection."
+            "Highest 5-fold CV Accuracy, matching official ACC3; tie-break "
+            "by CV Macro-F1 and CV Balanced Accuracy. Validation metrics are "
+            "not used for selection."
         ),
         "class_order": CLASS_ORDER,
         "random_state": RANDOM_STATE,
@@ -836,16 +861,39 @@ def save_outputs(
             )
         handle.write(f"Best Model = {best_model_name}\n")
         handle.write(
-            "Selection = CV Macro-F1 > CV Balanced Accuracy > CV Accuracy\n"
+            "Selection = CV Accuracy > CV Macro-F1 > CV Balanced Accuracy\n"
         )
         handle.write(f"Input Features = {len(feature_columns)}\n")
         handle.write(f"Transformed Features = {transformed_count}\n")
+    with open(
+        os.path.join(METRICS_RAW_DIR, "task3_run_complete.json"),
+        "w",
+        encoding="utf-8",
+    ) as handle:
+        json.dump(
+            {
+                "status": "complete",
+                "best_model": best_model_name,
+                "ACC3": validation_metrics["Accuracy"],
+                "prediction_rows": int(len(y_val)),
+                "selection_rule": metrics["selection_rule"],
+            },
+            handle,
+            ensure_ascii=False,
+            indent=2,
+        )
 
 
 def main() -> None:
+    run_complete_path = os.path.join(
+        METRICS_RAW_DIR,
+        "task3_run_complete.json",
+    )
+    if os.path.exists(run_complete_path):
+        os.remove(run_complete_path)
     print("=" * 72)
-    print("Task 3: Wellness Category Prediction (v3.3)")
-    print("Selection: 5-fold CV Macro-F1; preprocessing: fold-local Pipeline")
+    print("Task 3: Wellness Category Prediction (v3.4)")
+    print("Selection: 5-fold CV Accuracy; preprocessing: fold-local Pipeline")
     print("=" * 72)
 
     print("\n[1/7] Loading and cleaning data...")
@@ -897,11 +945,28 @@ def main() -> None:
             f"val={np.sum(y_val == class_index)}"
         )
 
-    print("\n[5/7] Running leakage-safe 5-fold comparison...")
+    print("\n[5/7] Running leakage-safe 5-fold comparison and tuning...")
     models = build_model_pipelines(numeric_columns, categorical_columns)
     validate_required_models(models)
-    cv_comparison = run_cross_validation(models, x_train, y_train)
+    base_cv_comparison = run_cross_validation(models, x_train, y_train)
+    print("  Logistic Regression C tuning (training CV only):")
+    tuning_models = build_logistic_tuning_pipelines(
+        numeric_columns,
+        categorical_columns,
+    )
+    tuning_cv_comparison = run_cross_validation(
+        tuning_models,
+        x_train,
+        y_train,
+    )
+    best_tuning_name = select_best_model(tuning_cv_comparison)
+    models.update(tuning_models)
+    cv_comparison = pd.concat(
+        [base_cv_comparison, tuning_cv_comparison],
+        ignore_index=True,
+    )
     best_name = select_best_model(cv_comparison)
+    print(f"  Best tuning configuration: {best_tuning_name}")
     print(f"  Selected by CV only: {best_name}")
 
     print("\n[6/7] Fitting all candidates and reporting validation...")
@@ -913,6 +978,42 @@ def main() -> None:
         y_val,
     )
     comparison = add_validation_metrics(cv_comparison, validation, best_name)
+    tuning_comparison = comparison[
+        comparison["Model"].isin(tuning_models)
+    ].copy()
+    tuning_comparison.insert(
+        2,
+        "C",
+        tuning_comparison["Model"].str.extract(
+            r"Tuned C=([0-9.]+)",
+            expand=False,
+        ).astype(float),
+    )
+    tuning_comparison.insert(
+        3,
+        "Best_Within_Tuning",
+        tuning_comparison["Model"].eq(best_tuning_name),
+    )
+    tuning_comparison.insert(
+        4,
+        "Tuning_Rule",
+        "5-fold training CV Accuracy; no validation metrics used",
+    )
+    tuning_comparison = tuning_comparison[
+        [
+            "Model",
+            "CV_Rank",
+            "C",
+            "Best_Within_Tuning",
+            "Tuning_Rule",
+        ]
+        + [
+            column
+            for column in tuning_comparison.columns
+            if column.startswith("CV_")
+            and column != "CV_Rank"
+        ]
+    ]
     weight_ablation = build_weight_ablation(comparison)
     best_pipeline = fitted[best_name]
     best_prediction = predictions[best_name]
@@ -929,6 +1030,7 @@ def main() -> None:
         y_pred=best_prediction,
         baseline_pred=baseline_prediction,
         comparison=comparison,
+        tuning_comparison=tuning_comparison,
         weight_ablation=weight_ablation,
         best_model_name=best_name,
         best_pipeline=best_pipeline,

@@ -97,7 +97,7 @@ EDA 脚本，用于在建模前了解数据基本情况，可跳过。
 
 ## 五、`src/task3.py` → 统一结果目录
 
-> v3.1 的 `ACC3=0.8160`、LightGBM 最优和固定“56个特征”均为历史记录。v3.3 完整重跑前不得把它们写进最终论文。
+> v3.1 的 `ACC3=0.8160` 和 LightGBM 最优仅为历史记录。Task 3 v3.4 已完成并冻结：最终模型为无权重逻辑回归（`C=1`），五折 CV Accuracy=0.8481，验证集 `ACC3=0.8485`。
 
 ### 1. 基线结果
 
@@ -112,9 +112,11 @@ EDA 脚本，用于在建模前了解数据基本情况，可跳过。
 | 文件 | 说明 |
 |------|------|
 | `results/metrics/raw/task3_model_comparison.csv` | 全部候选模型的五折 CV 与验证指标；只允许一行 `Selected=True` |
+| `results/metrics/raw/task3_tuning.csv` | 逻辑回归 `C∈{0.1,0.3,1,3,10}` 的训练集五折搜索结果；不使用验证集选参 |
 | `results/metrics/raw/task3_weight_ablation.csv` | 固定 LightGBM 其他参数，只比较 `class_weight=None` 与 `"balanced"`；保存两组原始指标及相对无权重组的差值 |
 | `results/metrics/raw/task3_classification_report.csv` | 选中模型的 Poor/Average/Good/Excellent precision、recall、F1 |
 | `results/metrics/raw/task3_metrics.json` | 最终模型名、ACC3、Macro-F1、Balanced Accuracy、四类 Recall、样本数、seed、折数和特征数的机器可读摘要 |
+| `results/metrics/raw/task3_run_complete.json` | 仅在全部结果成功保存后生成的完成标记 |
 
 ### 3. 图、预测与模型
 
@@ -123,14 +125,14 @@ EDA 脚本，用于在建模前了解数据基本情况，可跳过。
 | `results/figures/candidate/task3_confusion_matrix.png` | CV 选中模型在共享验证集上的混淆矩阵 |
 | `results/figures/candidate/task3_confusion_matrix.csv` | 与候选模型混淆矩阵图片对应的精确计数 |
 | `results/figures/candidate/task3_feature_importance.png` | 选中模型 Top 20 特征重要性图 |
-| `results/metrics/raw/task3_feature_importance.csv` | 完整特征重要性表；逻辑回归取各类别绝对系数均值，树模型使用原生重要性 |
+| `results/metrics/raw/task3_feature_importance.csv` | 56 个原始输入字段的验证集置换重要性；以打乱字段后的 Accuracy 平均下降量衡量，只解释预测关联 |
 | `results/metrics/raw/task3_features_used.csv` | 实际进入 Task 3 主模型的原始字段及数值/类别类型 |
-| `results/predictions/candidate/task3_predictions.csv` | `Person_ID + True_Label + Predicted_Label`，预期 2000 行且包含 Poor 类 |
+| `results/predictions/candidate/task3_predictions.csv` | 本地验证文件：`Person_ID + True_Label + Predicted_Label`，2000 行；包含逐人信息，不上传公开仓库 |
 | `models/candidate/task3/task3_best_model.pkl` | 包含填补、One-Hot、标准化和分类器的完整 Pipeline |
 
 ### 4. 论文引用规则
 
-1. ACC3、Macro-F1、Balanced Accuracy 和四类 Recall：读取 `task3_model_comparison.csv` 中唯一的 `Selected=True` 行。
+1. ACC3、Macro-F1、Balanced Accuracy 和四类 Recall：读取 `task3_model_comparison.csv` 中唯一的 `Selected=True` 行；当前分别为 0.8485、0.7832、0.7652，Poor Recall 为 0.5217。
 2. 类别权重结论：读取 `task3_weight_ablation.csv`，不能只看 Accuracy，必须同时比较 Macro-F1 与 Poor Recall。
 3. 编码后特征数：读取 `task3_metrics.json` 的 `transformed_features_used`，不写死。
 4. 任何运行后手工改动的数字都不能作为正式结果；结果变化时重新运行脚本并同步更新论文。

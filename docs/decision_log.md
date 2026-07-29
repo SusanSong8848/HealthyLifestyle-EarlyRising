@@ -19,3 +19,4 @@
 | 07-27 17:00 | D-012 | Task2 最优模型: LogisticRegression (CV ACC2=0.8044)，否决 Voting Ensemble | A | B | 已确认 |
 | 07-27 17:00 | D-013 | Task3 最优模型: LightGBM + class_weight=balanced (CV ACC3=0.8174) | A | B | 已确认 |
 | 07-27 17:00 | D-014 | 创建 src/clean_utils.py 消除三处重复清洗代码 | A | B | 已确认 |
+| 07-29 19:30 | D-015 | Task3 v3.4 按官方 ACC3 改为 CV Accuracy 优先；最终模型为 LogisticRegression(C=1)，CV Accuracy=0.8481、验证 ACC3=0.8485，替代 D-013 的历史候选 | C | A待复核 | 已冻结 |

@@ -1,4 +1,4 @@
-# 项目文件结构（v3.3 — Task 3 统一版）
+# 项目文件结构（v3.4 — Task 3 冻结版）
 
 ```
 HealthyLifestyle_EarlyRising/
@@ -113,7 +113,7 @@ D:\python\python.exe -m unittest discover -s tests -p "test_*.py" -v
 
 验收标准为命令末尾显示 `OK`，且没有 failed/error；测试总数不再写死。
 
-## v3.3 核心改进
+## v3.4 核心改进
 
 | 改进 | 说明 |
 |------|------|
@@ -123,15 +123,18 @@ D:\python\python.exe -m unittest discover -s tests -p "test_*.py" -v
 | **折内预处理** | 缺失填补、One-Hot 和标准化均在 Pipeline 内按 CV 折拟合，避免预处理泄漏 |
 | **不平衡指标完整** | 同时报告 Accuracy、Macro-F1、Balanced Accuracy 和四类 Recall，重点复核 Poor Recall |
 | **受控类别权重消融** | 固定 LightGBM 其余参数，仅比较 `class_weight=None` 与 `"balanced"` |
+| **小范围参数搜索** | 仅在训练集五折内比较逻辑回归 `C∈{0.1,0.3,1,3,10}`，不依据验证集调参 |
+| **原始字段解释** | 使用验证集置换重要性解释 56 个原始输入字段，不把 One-Hot 展开列误作独立变量 |
 | **共享清洗函数** | `src/clean_utils.py` 消除三处重复 |
 | **自动化测试扩充** | 新增共享切分与任务3管道/消融测试 |
 
 ## Task 3 验收顺序
 
 1. 先运行全部单元测试。
-2. 再运行 `D:\python\python.exe src\task3.py`，中途不得手工改 CSV。
+2. 再运行 `python src\task3.py`，中途不得手工改 CSV。
 3. 检查 `task3_baseline.csv` 恰有 Dummy 和无权重逻辑回归两行。
 4. 检查 `task3_weight_ablation.csv` 恰有无权重和 `balanced` LightGBM 两行，且两行除 `class_weight` 外参数一致。
 5. 检查 `task3_model_comparison.csv` 恰有一个 `Selected=True`。
-6. 检查两个混淆矩阵、特征重要性图、预测表和模型文件均已生成。
-7. 最终论文中的 Task 3 数值只能从上述结果文件读取，旧的 `ACC3=0.8160` 不得直接沿用。
+6. 检查 `task3_tuning.csv` 包含 5 个 `C` 值，且调参选择只读取训练 CV 指标。
+7. 检查两个混淆矩阵、特征重要性图、预测表、模型文件和 `task3_run_complete.json` 均已生成。
+8. 最终论文中的 Task 3 数值只能从上述结果文件读取；冻结结果为 `ACC3=0.8485`，旧的 0.8160/0.8170 仅可标注为历史候选。

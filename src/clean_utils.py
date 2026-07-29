@@ -45,7 +45,11 @@ def load_and_clean_data(data_path: str) -> pd.DataFrame:
     df.loc[mask_no_ex & df["Workout_Intensity"].isna(), "Workout_Intensity"] = "No Workout"
     df["Alcohol_Consumption"] = df["Alcohol_Consumption"].fillna("Unknown")
 
-    assert df.isnull().sum().sum() == 0, "Missing values remain after cleaning!"
+    missing_cells = int(df.isnull().sum().sum())
+    if missing_cells:
+        raise ValueError(
+            f"Missing values remain after cleaning: {missing_cells} cells"
+        )
     return df
 
 
