@@ -1,0 +1,12 @@
+ACC3 = 0.848500
+Accuracy = 0.848500
+Macro-F1 = 0.783209
+Balanced Accuracy = 0.765246
+Recall Poor = 0.521739
+Recall Average = 0.807963
+Recall Good = 0.857788
+Recall Excellent = 0.873494
+Best Model = Logistic Regression (Tuned C=1)
+Selection = CV Accuracy > CV Macro-F1 > CV Balanced Accuracy
+Input Features = 56
+Transformed Features = 118

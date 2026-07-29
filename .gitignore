@@ -37,9 +37,9 @@ datas.csv
 *.pkl
 
 # Keep small, auditable team deliverables under version control.
-# Raw/processed datasets remain ignored by the broad rules above.
-!data/splits/split_manifest.csv
+# Raw/processed datasets and row-level outputs remain local.
 !results/**/*.csv
+results/predictions/candidate/task3_predictions.csv
 !results/metrics/raw/task3_metrics.pkl
 !models/candidate/task3/task3_best_model.pkl
 

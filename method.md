@@ -149,7 +149,9 @@ D:\python\python.exe src\task3.py                         # 任务3: Wellness Ca
 - 数值缺失填补与标准化、类别缺失填补与 One-Hot 编码均放入 `sklearn Pipeline`，每个交叉验证折只在该折训练部分拟合。
 - 基线固定为 `DummyClassifier(strategy="most_frequent")` 和无权重多项逻辑回归。
 - 候选模型使用逻辑回归、随机森林、XGBoost（环境可用时）及 LightGBM。
-- 模型选择只使用训练集五折交叉验证结果，优先级为 `Macro-F1 → Balanced Accuracy → Accuracy`；验证集只用于一次最终报告，不参与选模。
+- 模型选择只使用训练集五折交叉验证结果。由于赛题以 ACC3 计分，优先级设为 `Accuracy → Macro-F1 → Balanced Accuracy`；后两项用于同 Accuracy 时的稳健性比较，并重点检查 Poor 类是否被模型放弃。验证集只用于一次最终报告，不参与选模。
+- 在基线比较后，只对表现最佳的逻辑回归家族做小范围正则化搜索，取 `C∈{0.1,0.3,1,3,10}`。五组配置使用相同特征、相同 Pipeline、相同五折与相同 seed，结果写入 `task3_tuning.csv`；调参过程不读取验证集指标。
+- 最终模型确定后，在验证集上逐一打乱 56 个原始输入字段，以 Accuracy 的平均下降量计算置换重要性。该口径避免把独热编码后的类别水平误当成多个原始变量；重要性只表示预测关联，不作因果解释。
 
 ### 5.3 类别权重受控消融
 
@@ -189,7 +191,7 @@ D:\python\python.exe src\task3.py                         # 任务3: Wellness Ca
 
 ### 5.5 当前结果状态
 
-v3.1 曾得到 `ACC3=0.8160`，但该结果来自旧脚本和旧评价口径，只作为历史基线。v3.3 必须完整重跑后，才能从 `task3_model_comparison.csv` 的 `Selected=True` 行填写最终 ACC3、Macro-F1、Balanced Accuracy、四类 Recall 和模型名称。
+v3.1 曾得到 `ACC3=0.8160`，但该结果来自旧脚本和旧评价口径，只作为历史基线。v3.4 必须完整重跑后，才能从 `task3_model_comparison.csv` 的 `Selected=True` 行填写最终 ACC3、Macro-F1、Balanced Accuracy、四类 Recall 和模型名称。
 
 ---
 

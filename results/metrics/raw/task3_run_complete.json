@@ -1,0 +1,7 @@
+{
+  "status": "complete",
+  "best_model": "Logistic Regression (Tuned C=1)",
+  "ACC3": 0.8485,
+  "prediction_rows": 2000,
+  "selection_rule": "Highest 5-fold CV Accuracy, matching official ACC3; tie-break by CV Macro-F1 and CV Balanced Accuracy. Validation metrics are not used for selection."
+}
