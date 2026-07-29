@@ -58,6 +58,8 @@ pd.DataFrame(mrows).to_csv('results/metrics/raw/task1_model_comparison.csv', ind
 
 ### 3. Reproduction Report (D28-05)
 print('\n=== D28-05: Reproduction Report ===')
+with open('results/metrics/raw/task3_metrics.json', 'r', encoding='utf-8') as handle:
+    task3_metrics = json.load(handle)
 rep = {
     'reproduction_date': '2026-07-28',
     'seed': R,
@@ -65,9 +67,14 @@ rep = {
     'data_sha256': hashlib.sha256(open('data/raw/A题数据集.csv','rb').read()).hexdigest(),
     'task1_acc': float(accuracy_score(pd.read_csv('outputs/task1/predictions.csv')['True_Label'], pd.read_csv('outputs/task1/predictions.csv')['Predicted_Label'])),
     'task2_acc': float(accuracy_score(pd.read_csv('outputs/task2/predictions.csv')['True_Label'], pd.read_csv('outputs/task2/predictions.csv')['Predicted_Label'])),
-    'task3_acc': float(accuracy_score(pd.read_csv('outputs/task3/predictions.csv')['True_Label'], pd.read_csv('outputs/task3/predictions.csv')['Predicted_Label'])),
-    'total_score': round(0.7535*20 + 0.8135*40 + 0.8160*40, 2),
+    'task3_acc': float(task3_metrics['ACC3']),
 }
+rep['total_score'] = round(
+    rep['task1_acc'] * 20
+    + rep['task2_acc'] * 40
+    + rep['task3_acc'] * 40,
+    2,
+)
 with open('results/logs/reproduction_candidates.md', 'w', encoding='utf-8') as f:
     f.write('# Reproduction Report\n\n')
     f.write(f"- Date: {rep['reproduction_date']}\n")
@@ -81,6 +88,6 @@ with open('results/logs/reproduction_candidates.md', 'w', encoding='utf-8') as f
     f.write(f'| Task3 | {rep["task3_acc"]:.4f} | 40% | {rep["task3_acc"]*40:.2f} |\n')
     f.write(f'| **Total** | | | **{rep["total_score"]:.2f}** |\n\n')
     f.write('## Reproduction Commands\n\n')
-    f.write('```bash\nD:\\python\\python.exe src\\preprocess.py\nD:\\python\\python.exe src\\task1_final.py\nD:\\python\\python.exe src\\task2_health_score.py\nD:\\python\\python.exe src\\task3_wellness_category.py\n```\n')
+    f.write('```bash\npython src\\preprocess.py\npython src\\task1_final.py\npython src\\task2_health_score.py\npython src\\task3.py\n```\n')
 print(f'  Total score: {rep["total_score"]:.2f}')
 print('\n=== D28 ALL DONE ===')

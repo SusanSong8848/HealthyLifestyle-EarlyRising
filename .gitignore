@@ -36,8 +36,16 @@ datas.csv
 *.csv
 *.pkl
 
-# All CSV, pkl, and generated result files are excluded from git
-# (code-generated files only exist locally, never committed)
+# Generated tabular and serialized files are ignored by default.
+# Only aggregate, auditable Task 3 artifacts are allowed in the repository.
+!results/metrics/**/*.csv
+!results/figures/**/*.csv
+!results/metrics/raw/task3_metrics.pkl
+!models/candidate/task3/task3_best_model.pkl
+
+# Row-level split and prediction files must remain local.
+data/splits/**
+results/predictions/**
 
 # Logs
 *.log

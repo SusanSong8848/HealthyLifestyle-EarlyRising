@@ -12,6 +12,7 @@ sys.path.insert(0, os.path.join(ROOT, "src"))
 from task3 import (
     EXCLUDED_FEATURES,
     add_validation_metrics,
+    build_logistic_tuning_pipelines,
     build_model_pipelines,
     build_weight_ablation,
     evaluate_predictions,
@@ -34,6 +35,17 @@ class Task3PipelineTests(unittest.TestCase):
                 ["preprocessor", "classifier"],
             )
 
+    def test_logistic_tuning_grid_is_small_and_pipeline_based(self):
+        models = build_logistic_tuning_pipelines(["Age"], ["Gender"])
+        self.assertEqual(len(models), 5)
+        c_values = [
+            model.named_steps["classifier"].get_params()["C"]
+            for model in models.values()
+        ]
+        self.assertEqual(c_values, [0.1, 0.3, 1.0, 3.0, 10.0])
+        for model in models.values():
+            self.assertIsInstance(model, Pipeline)
+
     def test_required_metrics_include_zero_poor_recall(self):
         y_true = np.array([0, 0, 1, 1, 2, 2, 3, 3])
         y_pred = np.array([1, 1, 1, 1, 2, 0, 3, 2])
@@ -46,7 +58,7 @@ class Task3PipelineTests(unittest.TestCase):
         self.assertIn("Macro_F1", metrics)
         self.assertIn("Balanced_Accuracy", metrics)
 
-    def test_selection_uses_macro_f1_before_accuracy(self):
+    def test_selection_uses_official_accuracy_before_macro_f1(self):
         comparison = pd.DataFrame(
             [
                 {
@@ -63,7 +75,26 @@ class Task3PipelineTests(unittest.TestCase):
                 },
             ]
         )
-        self.assertEqual(select_best_model(comparison), "Macro F1 Winner")
+        self.assertEqual(select_best_model(comparison), "Accuracy Winner")
+
+    def test_selection_uses_macro_f1_as_accuracy_tie_breaker(self):
+        comparison = pd.DataFrame(
+            [
+                {
+                    "Model": "Lower Macro F1",
+                    "CV_Accuracy_Mean": 0.90,
+                    "CV_Macro_F1_Mean": 0.55,
+                    "CV_Balanced_Accuracy_Mean": 0.60,
+                },
+                {
+                    "Model": "Higher Macro F1",
+                    "CV_Accuracy_Mean": 0.90,
+                    "CV_Macro_F1_Mean": 0.65,
+                    "CV_Balanced_Accuracy_Mean": 0.62,
+                },
+            ]
+        )
+        self.assertEqual(select_best_model(comparison), "Higher Macro F1")
 
     def test_model_comparison_has_one_selected_row(self):
         comparison = pd.DataFrame(
@@ -99,7 +130,7 @@ class Task3PipelineTests(unittest.TestCase):
         self.assertIn("Val_Recall_Poor", result.columns)
         self.assertIn("Val_Macro_F1", result.columns)
 
-    def test_logistic_regression_produces_importance(self):
+    def test_logistic_regression_produces_original_feature_importance(self):
         x = pd.DataFrame(
             {
                 "Age": [20, 21, 30, 31, 40, 41, 50, 51, 22, 32, 42, 52],
@@ -126,9 +157,10 @@ class Task3PipelineTests(unittest.TestCase):
         model.fit(x, y)
         importance = extract_feature_importance(model, x, y)
         self.assertFalse(importance.empty)
+        self.assertEqual(set(importance["Feature"]), {"Age", "Gender"})
         self.assertEqual(
             importance["Method"].iloc[0],
-            "mean_absolute_logistic_coefficient",
+            "permutation_accuracy_original_feature",
         )
 
     def test_blacklist_contains_all_known_task3_leakage(self):

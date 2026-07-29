@@ -1,6 +1,6 @@
 # 建模方法论：三任务完整方案
 
-> 版本：v3.3（统一任务3入口、结果目录与类别权重消融）
+> 版本：v3.4（任务3最终选模、调参、解释与结果已冻结）
 > 日期：2026-07-28
 
 ---
@@ -149,7 +149,9 @@ D:\python\python.exe src\task3.py                         # 任务3: Wellness Ca
 - 数值缺失填补与标准化、类别缺失填补与 One-Hot 编码均放入 `sklearn Pipeline`，每个交叉验证折只在该折训练部分拟合。
 - 基线固定为 `DummyClassifier(strategy="most_frequent")` 和无权重多项逻辑回归。
 - 候选模型使用逻辑回归、随机森林、XGBoost（环境可用时）及 LightGBM。
-- 模型选择只使用训练集五折交叉验证结果，优先级为 `Macro-F1 → Balanced Accuracy → Accuracy`；验证集只用于一次最终报告，不参与选模。
+- 模型选择只使用训练集五折交叉验证结果。由于赛题以 ACC3 计分，优先级设为 `Accuracy → Macro-F1 → Balanced Accuracy`；后两项用于 Accuracy 相同时的稳健性比较，并重点检查 Poor 类是否被模型放弃。
+- 在基线比较后，只对表现最好的逻辑回归家族做小范围正则化搜索，取 `C∈{0.1,0.3,1,3,10}`。五组配置使用相同特征、相同 Pipeline、相同五折与相同随机种子，调参过程不依据验证集结果。
+- 最终模型冻结后，在验证集上逐一打乱 56 个原始输入字段，以 Accuracy 的平均下降量计算置换重要性。该口径避免把独热编码后的类别水平误当成多个原始变量；重要性只表示预测关联，不作因果解释。
 
 ### 5.3 类别权重受控消融
 
@@ -176,6 +178,7 @@ D:\python\python.exe src\task3.py                         # 任务3: Wellness Ca
 |------|------|
 | `results/metrics/raw/task3_baseline.csv` | Dummy 与无权重逻辑回归基线 |
 | `results/metrics/raw/task3_model_comparison.csv` | 全部候选模型的 CV、验证指标和唯一 `Selected=True` 行 |
+| `results/metrics/raw/task3_tuning.csv` | 逻辑回归 `C` 的训练集五折小范围搜索记录 |
 | `results/metrics/raw/task3_weight_ablation.csv` | 无权重/类别权重 LightGBM 受控比较 |
 | `results/metrics/raw/task3_classification_report.csv` | 最终模型四类 precision、recall、F1 |
 | `results/figures/baseline/task3_confusion_matrix.png/.csv` | 无权重逻辑回归基线混淆矩阵图片及计数 |
@@ -184,25 +187,26 @@ D:\python\python.exe src\task3.py                         # 任务3: Wellness Ca
 | `results/metrics/raw/task3_feature_importance.csv` | 最终候选模型完整特征重要性 |
 | `results/metrics/raw/task3_features_used.csv` | 主模型实际使用的原始字段清单 |
 | `results/metrics/raw/task3_metrics.json/.pkl/.txt` | 指标、配置和审计元数据 |
+| `results/metrics/raw/task3_run_complete.json` | 全部交付物保存成功后生成的运行完成标记 |
 | `results/predictions/candidate/task3_predictions.csv` | 验证集逐人真实/预测标签 |
 | `models/candidate/task3/task3_best_model.pkl` | 可直接复现预测的完整 Pipeline |
 
 ### 5.5 当前结果状态
 
-v3.1 曾得到 `ACC3=0.8160`，但该结果来自旧脚本和旧评价口径，只作为历史基线。v3.3 必须完整重跑后，才能从 `task3_model_comparison.csv` 的 `Selected=True` 行填写最终 ACC3、Macro-F1、Balanced Accuracy、四类 Recall 和模型名称。
+Task 3 v3.4 已完成并冻结。训练集五折交叉验证按 Accuracy 选出无权重逻辑回归，正则化参数 `C=1`。其五折 CV Accuracy 为 0.8481；在独立验证集上，`ACC3=0.8485`、Macro-F1=0.7832、Balanced Accuracy=0.7652、Poor Recall=0.5217。最终数字以 `task3_model_comparison.csv` 中唯一的 `Selected=True` 行及 `task3_metrics.json` 为准。
 
 ---
 
-## 6. 历史基线总评分（待 v3.3 重跑更新）
+## 6. 当前结果汇总
 
 | 任务 | ACC | 权重 | 得分 | 最优模型 |
 |------|:---:|:---:|:---:|------|
-| Task 1 | 0.7690 | 20% | 15.38 | Logistic Regression |
-| Task 2 | 0.8120 | 40% | 32.48 | Logistic Regression |
-| Task 3 | 0.8160（旧） | 40% | 32.64（旧） | LightGBM（旧） |
-| **初赛总分** | | | **81.64 / 100.00** | |
+| Task 1 | 0.7535（主线记录） | 20% | 15.07 | Logistic Regression |
+| Task 2 | 0.8135（主线记录，待唯一结果源复核） | 40% | 32.54 | Logistic Regression |
+| Task 3 | **0.8485（v3.4 已冻结）** | 40% | **33.94** | Logistic Regression (`C=1`) |
+| **暂计总分** | | | **81.55 / 100.00** | |
 
-> 最终论文不得直接引用本表的 Task 3 数值。重跑后以 `results/metrics/raw/task3_model_comparison.csv` 和 `task3_metrics.json` 为唯一结果源，并同步更新总分。
+> Task 3 数值已经由可复现输出冻结。Task 1/2 仍应在最终论文统稿前从各自唯一结果文件复核；若其中任一数字变化，必须同步重算总分。
 
 ---
 
