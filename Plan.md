@@ -1,4 +1,4 @@
-# 项目文件结构（v3.4 — Task 3 冻结版）
+# 项目文件结构（v4.0 — D30 三任务全部冻结）
 
 ```
 HealthyLifestyle_EarlyRising/
@@ -101,8 +101,10 @@ D:\python\python.exe src\run_all.py                       # 一键复现
 | D27-05 | `src/preprocess.py`, `data/processed/base_semantic_clean.csv`, `results/data_audit/cleaning_validation.csv`, `tests/test_data_contract.py` | ✅ |
 | D27-07 | `src/split.py`, `data/splits/split_manifest.csv`, `tests/test_split.py` | ✅ |
 | D27-08 | `src/task1.py`, `results/metrics/raw/task1_baseline.csv`, `results/figures/baseline/task1_confusion_matrix.png` | ✅ |
-| D27-10 | `src/task3.py`, `results/metrics/raw/task3_baseline.csv`, `results/figures/baseline/task3_confusion_matrix.png` | 代码就绪，待完整运行验收 |
-| D28-03 | `results/metrics/raw/task3_model_comparison.csv`, `results/metrics/raw/task3_weight_ablation.csv` | 代码就绪，待完整运行验收 |
+| D27-10 | `src/task3.py`, `results/metrics/raw/task3_baseline.csv`, `results/figures/baseline/task3_confusion_matrix.png` | ✅ 已完成 |
+| D28-03 | `results/metrics/raw/task3_model_comparison.csv`, `results/metrics/raw/task3_weight_ablation.csv` | ✅ 已完成 |
+| D30-01 | `results/final/` 全部交付物 | ✅ 已完成 (82.11/100) |
+| D30-02 | 三任务模型文件整理 | ✅ 已完成 |
 | — | `src/run_all.py`, `docs/decision_log.md`, `docs/metrics_schema.csv` | ✅ |
 
 ## 单元测试
@@ -113,7 +115,7 @@ D:\python\python.exe -m unittest discover -s tests -p "test_*.py" -v
 
 验收标准为命令末尾显示 `OK`，且没有 failed/error；测试总数不再写死。
 
-## v3.4 核心改进
+## v4.0 核心改进
 
 | 改进 | 说明 |
 |------|------|
@@ -125,8 +127,10 @@ D:\python\python.exe -m unittest discover -s tests -p "test_*.py" -v
 | **受控类别权重消融** | 固定 LightGBM 其余参数，仅比较 `class_weight=None` 与 `"balanced"` |
 | **小范围参数搜索** | 仅在训练集五折内比较逻辑回归 `C∈{0.1,0.3,1,3,10}`，不依据验证集调参 |
 | **原始字段解释** | 使用验证集置换重要性解释 56 个原始输入字段，不把 One-Hot 展开列误作独立变量 |
+| **Task 2 v4.0 重构** | 按队友 task2_model.txt 规则重建，三阶段策略（CV筛选→权重消融→验证冻结），自定义边界离散化 |
 | **共享清洗函数** | `src/clean_utils.py` 消除三处重复 |
 | **自动化测试扩充** | 新增共享切分与任务3管道/消融测试 |
+| **D30 全部冻结** | 三任务最终模型、指标和文档均已完成并锁定 |
 
 ## Task 3 验收顺序
 

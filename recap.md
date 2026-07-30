@@ -82,16 +82,29 @@ EDA 脚本，用于在建模前了解数据基本情况，可跳过。
 
 ---
 
-## 四、`src/task2_health_score.py` → `outputs/task2/`
+## 四、`src/task2_health_score.py`（v4.0）→ `results/`
 
-### 1. `predictions.csv`
-2000行：Person_ID + True_Label + Predicted_Label。**ACC2 = 0.8135**。四分类 Poor/Average/Good/Excellent，分箱边界 [0,60,70,85,100]。
+### 1. 模型比较 + 消融
+| 文件 | 说明 |
+|------|------|
+| `results/metrics/raw/task2_model_comparison.csv` | Dummy/LR/LightGBM 三模型 5-Fold CV 与验证指标 |
+| `results/metrics/raw/task2_weight_ablation.csv` | LightGBM 无权重 vs Balanced 受控消融 |
+| `results/metrics/raw/task2_metrics.json` | 最终模型、ACC2、Macro-F1、BalAcc、四类 Recall |
 
-### 2. `feature_importance.csv`
-56个特征（排除 Health_Score/Wellness_Category/Fitness_Level/Healthy_Aging_Score）排名。Top 3: BMI, Energy_Level_Score, Mood_Score。
+### 2. 混淆矩阵 + 特征重要性
+| 文件 | 说明 |
+|------|------|
+| `results/figures/task2/task2_confusion_matrix_Logistic_Regression.png` | 验证集四分类混淆矩阵 |
+| `results/figures/task2/task2_feature_importance_Logistic_Regression.png` | Top 20 特征重要性（LR 系数均值） |
+| `results/metrics/raw/task2_feature_importance_Logistic_Regression.csv` | 55个特征完整排名 |
 
-### 3-4. `best_model.pkl` / `metrics.txt`
-最优模型：**Logistic Regression**（CV 0.8044±0.0084），CV 自动选最优。**得分：32.54/40.00**。
+### 3. 预测 + 模型
+| 文件 | 说明 |
+|------|------|
+| `results/predictions/task2/task2_predictions_Logistic_Regression.csv` | 2,000行：Person_ID + True_Label + Predicted_Label |
+| `models/candidate/task2/task2_best_model.pkl` | 完整 Pipeline（预处理器 + Logistic Regression） |
+
+**ACC2 = 0.8275**（CV 0.8162±0.0117），**Macro-F1 = 0.8209**，**得分：33.10/40.00**。最优模型：**Logistic Regression**（三阶段策略：CV筛选 → 权重消融 → 验证冻结）。
 
 ---
 

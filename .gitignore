@@ -37,15 +37,23 @@ datas.csv
 *.pkl
 
 # Generated tabular and serialized files are ignored by default.
-# Only aggregate, auditable Task 3 artifacts are allowed in the repository.
+# Only aggregate, auditable artifacts are allowed in the repository.
 !results/metrics/**/*.csv
 !results/figures/**/*.csv
 !results/metrics/raw/task3_metrics.pkl
+!results/metrics/raw/task2_metrics.json
+!results/metrics/raw/task3_run_complete.json
+!models/candidate/task1/task1_best_model.pkl
+!models/candidate/task2/task2_best_model.pkl
 !models/candidate/task3/task3_best_model.pkl
+!results/final/final_metrics.csv
+!results/final/final_manifest.csv
+!results/final/logs/
 
 # Row-level split and prediction files must remain local.
-data/splits/**
-results/predictions/**
+data/splits/
+results/predictions/
+results/final/predictions/
 
 # Logs
 *.log
@@ -54,3 +62,6 @@ results/predictions/**
 .clinerules/
 
 成员A执行手册_数据公共代码与任务一.docx
+成员B执行手册_模型实验与任务二.docx
+task2_model.txt
+B_require_A

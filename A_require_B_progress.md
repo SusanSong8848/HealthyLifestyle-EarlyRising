@@ -1,7 +1,7 @@
 # 成员 A — 项目进度日志
 
 > 维护人：成员 A（数据、公共代码与复现负责人）
-> 最后更新：2026-07-29 16:15
+> 最后更新：2026-07-30 15:00 (D30 全部交付)
 > 用途：供成员 B 快速同步，每次子任务完成后必须更新
 >
 > 成员 C 合并更新（2026-07-29）：Task 3 v3.4 已完成并冻结，以下涉及 Task 3 的状态和汇总数字已同步；Task 1/2 仍以成员 A 的主线记录为准。
@@ -19,7 +19,7 @@
 | 复现报告 (D28-05) | ✅ 已完成 |
 | 正式最终运行 (D29-01) | ✅ 已完成 |
 | 论文章节素材稿 (D29-04) | ✅ 已完成 |
-| Task 2 最终模型 | ⏳ 等待 B 交付 |
+| Task 2 最终模型 (v4.0) | ✅ 已完成 (ACC2=0.8275) |
 | Task 3 最终模型 | ✅ v3.4 已冻结 |
 
 ### 三任务最终指标
@@ -27,9 +27,9 @@
 | 任务 | ACC | 权重 | 得分 | 最优模型 |
 |------|:---:|:---:|:---:|------|
 | Task 1 | **0.7535** | 20% | 15.07 | Logistic Regression |
-| Task 2 | **0.8135** | 40% | 32.54 | Logistic Regression |
+| Task 2 | **0.8275** | 40% | 33.10 | Logistic Regression |
 | Task 3 | **0.8485** | 40% | 33.94 | Logistic Regression (`C=1`) |
-| **暂计总分** | | | **81.55 / 100.00** | |
+| **初赛总分** | | | **82.11 / 100.00** | |
 
 ---
 
@@ -163,12 +163,44 @@
 
 | 卡点 | 影响 | 需要谁 |
 |------|------|:---:|
-| Task 2 最终模型未冻结 | 论文中 Task 2 的指标和模型比较表还不能写 | **成员 B** |
-| Task 3 v3.4 已完成 | 无；论文数字从 `task3_metrics.json` 读取，禁止回退到旧版 0.8170 | **成员 C** |
+| ~~Task 2 最终模型未冻结~~ | ✅ 成员B已完成 Task 2 v4.0 (ACC2=0.8275) | **已完成** |
+| ~~results/final/ 丢失~~ | ✅ 成员A重建完成 (总分 82.11/100) | **已完成** |
 | 论文主稿未合并 | A 的素材稿需要C统稿 | **成员 C** |
+
+---
+
+### 2026-07-30 下午 — 成员A 最终交付物补全 ✅
+
+#### D30-01 — results/final/ 重建 ✅
+- **做了什么**：重建 `results/final/` 目录及全部交付物
+- **交付文件**：
+  - `results/final/final_metrics.csv` — 三任务正式指标汇总 (82.11/100.00)
+  - `results/final/predictions/task1_predictions.csv` — 2,000行
+  - `results/final/predictions/task2_predictions.csv` — 2,000行
+  - `results/final/predictions/task3_predictions.csv` — 2,000行
+  - `results/final/final_manifest.csv` — 文件清单 + SHA256
+  - `results/final/logs/final_run.log` — 运行日志
+  - `results/final/reproduction_report.md` — 复现报告
+
+#### D30-02 — 模型文件整理 ✅
+- Task 1: `outputs/task1/best_model.pkl` → `models/candidate/task1/task1_best_model.pkl`
+- Task 2: `models/candidate/task2/task2_best_model.pkl` ✅
+- Task 3: `models/candidate/task3/task3_best_model.pkl` ✅
+
+#### D30-03 — 数据验证 ✅
+- 单元测试: `python -m unittest discover -s tests -p "test_*.py" -v` → OK
+- 三任务预测文件: 各 2,000 行，含 Person_ID、True_Label、Predicted_Label
+- 三任务最终指标确认:
+
+| 任务 | ACC | 权重 | 得分 | 模型 |
+|------|:---:|:---:|:---:|------|
+| Task 1 | 0.7535 | 20% | 15.07 | Logistic Regression |
+| Task 2 | 0.8275 | 40% | 33.10 | Logistic Regression |
+| Task 3 | 0.8485 | 40% | 33.94 | Logistic Regression (C=1) |
+| **初赛总分** | | | **82.11 / 100.00** | |
 
 ## 下一步建议
 
-1. **成员 B**：完成 Task 2 最终模型 + 模型比较表，将 final metrics 更新到 `results/final/`
-2. **成员 C**：将已冻结的 Task 3 v3.4 结果合入论文主稿，并复核所有引用数字
-3. **D30 冻结**（7/30）：三人确认 final_metrics 后锁定所有模型和参数
+1. **成员 C**：将三任务结果合入论文主稿，复核所有引用数字
+2. **集体**：确认 `results/final/final_metrics.csv` 中数字后锁定所有模型和参数
+3. **提交准备**：三份预测 CSV（各 2,000 行）+ 模型代码 + 建模报告
