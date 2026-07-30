@@ -1,0 +1,9 @@
+Phase 1 结果摘要
+===============
+
+              model  cv_accuracy_mean  cv_accuracy_std  cv_balanced_accuracy_mean  cv_macro_f1_mean  cv_recall_Poor_mean  cv_recall_Average_mean  cv_recall_Good_mean  cv_recall_Excellent_mean
+Dummy_Most_Frequent          0.446375         0.000280                   0.250000          0.154308             0.000000                0.000000             1.000000                  0.000000
+Logistic_Regression          0.816250         0.011743                   0.804922          0.811984             0.735553                0.818178             0.859707                  0.806251
+LightGBM_Unweighted          0.769375         0.015354                   0.736943          0.756906             0.653762                0.748236             0.862786                  0.682989
+
+请确认后设置 PHASE1_CONFIRMED=True 继续。

@@ -1,0 +1,5 @@
+Task,ACC,Weight,Score,Best_Model,Random_State,Train_Size,Val_Size
+Task 1,0.7535,20%,15.07,Logistic Regression,20260726,8000,2000
+Task 2,0.8275,40%,33.1,Logistic Regression,20260726,8000,2000
+Task 3,0.8485,40%,33.94,Logistic Regression (Tuned C=1),20260726,8000,2000
+TOTAL,,100%,82.11,,,,

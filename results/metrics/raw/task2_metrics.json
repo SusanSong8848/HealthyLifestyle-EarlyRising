@@ -1,0 +1,75 @@
+{
+  "phase1_model_comparison": [
+    {
+      "model": "Dummy_Most_Frequent",
+      "cv_accuracy_mean": 0.446375,
+      "cv_accuracy_std": 0.0002795084971874,
+      "cv_balanced_accuracy_mean": 0.25,
+      "cv_macro_f1_mean": 0.1543081739286267,
+      "cv_recall_Poor_mean": 0.0,
+      "cv_recall_Average_mean": 0.0,
+      "cv_recall_Good_mean": 1.0,
+      "cv_recall_Excellent_mean": 0.0
+    },
+    {
+      "model": "Logistic_Regression",
+      "cv_accuracy_mean": 0.8162499999999999,
+      "cv_accuracy_std": 0.0117426838925349,
+      "cv_balanced_accuracy_mean": 0.8049222677501403,
+      "cv_macro_f1_mean": 0.8119838466145131,
+      "cv_recall_Poor_mean": 0.735553371748485,
+      "cv_recall_Average_mean": 0.8181781417450209,
+      "cv_recall_Good_mean": 0.8597069597069599,
+      "cv_recall_Excellent_mean": 0.8062505978000957
+    },
+    {
+      "model": "LightGBM_Unweighted",
+      "cv_accuracy_mean": 0.7693749999999999,
+      "cv_accuracy_std": 0.0153538981206727,
+      "cv_balanced_accuracy_mean": 0.7369431169545966,
+      "cv_macro_f1_mean": 0.7569056936090128,
+      "cv_recall_Poor_mean": 0.6537618558389542,
+      "cv_recall_Average_mean": 0.7482357698918208,
+      "cv_recall_Good_mean": 0.862785841609371,
+      "cv_recall_Excellent_mean": 0.6829890004782401
+    }
+  ],
+  "phase2_ablation": [
+    {
+      "model": "LightGBM_No_Weight",
+      "cv_accuracy_mean": 0.7693749999999999,
+      "cv_accuracy_std": 0.0153538981206727,
+      "cv_balanced_accuracy_mean": 0.7369431169545966,
+      "cv_macro_f1_mean": 0.7569056936090128,
+      "cv_recall_Poor_mean": 0.6537618558389542,
+      "cv_recall_Average_mean": 0.7482357698918208,
+      "cv_recall_Good_mean": 0.862785841609371,
+      "cv_recall_Excellent_mean": 0.6829890004782401,
+      "class_weight": "No_Weight"
+    },
+    {
+      "model": "LightGBM_Balanced_Weight",
+      "cv_accuracy_mean": 0.77625,
+      "cv_accuracy_std": 0.0158853312839235,
+      "cv_balanced_accuracy_mean": 0.7553030197115014,
+      "cv_macro_f1_mean": 0.767251227360646,
+      "cv_recall_Poor_mean": 0.6788627328360209,
+      "cv_recall_Average_mean": 0.7889252856131838,
+      "cv_recall_Good_mean": 0.8381395075512723,
+      "cv_recall_Excellent_mean": 0.7152845528455284,
+      "class_weight": "Balanced_Weight"
+    }
+  ],
+  "final_model": "Logistic_Regression",
+  "final_metrics": {
+    "test_accuracy": 0.8275,
+    "test_balanced_accuracy": 0.8143966859856143,
+    "test_macro_f1": 0.8208598295699852,
+    "test_recall_Poor": 0.7554112554112554,
+    "test_recall_Average": 0.8269720101781171,
+    "test_recall_Good": 0.8720538720538721,
+    "test_recall_Excellent": 0.8031496062992126
+  },
+  "score": 33.1,
+  "note": "按 task2_model.txt 规则重构 v4.0, 补全产物"
+}

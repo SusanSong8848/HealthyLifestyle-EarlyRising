@@ -1,0 +1,4 @@
+Scenario,N_Features,Excluded,5-Fold_CV_ACC_Mean,CV_Std
+S1_含直接泄漏(WakeUp+Sleep分钟),61,Healthy_Aging_Score,0.9915,0.0021
+S2_移除直接泄漏(保留Sleep_Duration),59,"Wake_Up_Time_Minutes, Healthy_Aging_Score, Sleep_Time_Minutes",0.7529,0.0063
+S3_移除所有时钟特征(最终版),58,"Wake_Up_Time_Minutes, Healthy_Aging_Score, Sleep_Time_Minutes, Sleep_Duration_Hours",0.7531,0.0066

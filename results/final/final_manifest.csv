@@ -1,0 +1,5 @@
+file,size_bytes,sha256_short
+final_metrics.csv,293,b71abbe259bff2bb
+predictions\task1_predictions.csv,29611,02fc93a709d2efa6
+predictions\task2_predictions.csv,42657,c878e4a7723c8829
+predictions\task3_predictions.csv,45147,a98fd373a388b8e6

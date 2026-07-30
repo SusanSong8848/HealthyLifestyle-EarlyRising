@@ -1,0 +1,5 @@
+Model,5-Fold_CV_ACC_Mean,CV_Std,Time_s
+Logistic Regression,0.7531,0.0066,0.1
+Random Forest,0.7393,0.0061,3.4
+XGBoost,0.7357,0.0069,6.4
+LightGBM,0.7408,0.008,4.0
